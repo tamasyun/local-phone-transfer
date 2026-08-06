@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigPath = Join-Path $AppDir 'transfer-config.json'
 $MessagesPath = Join-Path $AppDir 'messages.json'
+$ChecksumsPath = Join-Path $AppDir 'SHA256SUMS.txt'
 
 function Load-Messages {
     if (Test-Path -LiteralPath $MessagesPath) {
@@ -25,31 +26,67 @@ function New-SessionPassword([int]$length) {
     if ($length -lt 12) { $length = 12 }
     if ($length -gt 32) { $length = 32 }
     $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+    $limit = 256 - (256 % $chars.Length)
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
     try {
-        $bytes = New-Object byte[] $length
-        $rng.GetBytes($bytes)
         $sb = New-Object System.Text.StringBuilder
-        foreach ($b in $bytes) { [void]$sb.Append($chars[$b % $chars.Length]) }
+        $buffer = New-Object byte[] 32
+        while ($sb.Length -lt $length) {
+            $rng.GetBytes($buffer)
+            foreach ($b in $buffer) {
+                if ($b -lt $limit) {
+                    [void]$sb.Append($chars[$b % $chars.Length])
+                    if ($sb.Length -ge $length) { break }
+                }
+            }
+        }
         return $sb.ToString()
     } finally { $rng.Dispose() }
+}
+
+function Read-ExpectedExecutables {
+    if (!(Test-Path -LiteralPath $ChecksumsPath)) {
+        throw (Text 'integrityFailed' 'Application integrity check failed.')
+    }
+    $items = @()
+    foreach ($line in (Get-Content -LiteralPath $ChecksumsPath -Encoding UTF8)) {
+        if ($line -match '^([0-9a-fA-F]{64})\s\s(.+\.exe)$') {
+            $items += [pscustomobject]@{
+                Hash = $matches[1].ToLowerInvariant()
+                Name = $matches[2]
+            }
+        }
+    }
+    if ($items.Count -lt 1) {
+        throw (Text 'integrityFailed' 'Application integrity check failed.')
+    }
+    return $items
+}
+
+function Test-ExecutableHash([string]$path, [string]$expectedHash) {
+    if (!(Test-Path -LiteralPath $path)) { return $false }
+    try {
+        $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        return ($actual -eq $expectedHash)
+    } catch { return $false }
 }
 
 if (!(Test-Path -LiteralPath $ConfigPath)) {
     throw (Text 'configMissing' 'transfer-config.json was not found.')
 }
 
-$allExe = Get-ChildItem -LiteralPath $AppDir -Filter '*.exe' -File
-$exeArm = $allExe | Where-Object { $_.Name -like '*_ARM64.exe' } | Select-Object -First 1
-$exeX64 = $allExe | Where-Object { $_.Name -notlike '*_ARM64.exe' } | Select-Object -First 1
+$expectedExecutables = @(Read-ExpectedExecutables)
+$armItem = $expectedExecutables | Where-Object { $_.Name -like '*_ARM64.exe' } | Select-Object -First 1
+$x64Item = $expectedExecutables | Where-Object { $_.Name -notlike '*_ARM64.exe' } | Select-Object -First 1
 
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-if ($arch -eq 'Arm64' -and $null -ne $exeArm) {
-    $ExePath = $exeArm.FullName
-} elseif ($null -ne $exeX64) {
-    $ExePath = $exeX64.FullName
-} else {
+$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+$selected = if ($arch -eq 'ARM64' -and $null -ne $armItem) { $armItem } else { $x64Item }
+if ($null -eq $selected) {
     throw (Text 'exeMissing' 'Transfer executable was not found.')
+}
+$ExePath = Join-Path $AppDir $selected.Name
+if (!(Test-ExecutableHash $ExePath $selected.Hash)) {
+    throw (Text 'integrityFailed' 'Application integrity check failed.')
 }
 
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
