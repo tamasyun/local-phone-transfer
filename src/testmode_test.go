@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,4 +37,32 @@ func TestCleanupUploadTemps(t *testing.T) {
 	if err := cleanupUploadTemps(dir); err != nil { t.Fatal(err) }
 	if _, err := os.Stat(tmp); !os.IsNotExist(err) { t.Fatalf("temporary upload was not removed") }
 	if _, err := os.Stat(keep); err != nil { t.Fatalf("completed file was removed: %v", err) }
+}
+
+func TestBogusPhoneTokenDoesNotBindPhoneIP(t *testing.T) {
+	_, subnet, err := net.ParseCIDR("192.168.137.0/24")
+	if err != nil { t.Fatal(err) }
+	a := &App{phoneToken: "secret", transferNet: subnet}
+	r := httptest.NewRequest("GET", "http://192.168.137.1/s/wrong/", nil)
+	r.RemoteAddr = "192.168.137.55:50000"
+	w := httptest.NewRecorder()
+	a.handlePhone(w, r)
+	if a.phoneIP != "" {
+		t.Fatalf("bogus token bound phone IP: %q", a.phoneIP)
+	}
+	if w.Code != 404 {
+		t.Fatalf("expected 404 for bogus token, got %d", w.Code)
+	}
+}
+
+func TestDefaultSessionLimits(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "transfer-config.json")
+	content := `{"deviceName":"PC","port":8765,"receiveDir":"recv","sendDir":"send","maxUploadMB":10,"idleStopMinutes":180,"absoluteStopMinutes":480,"transferSubnet":"192.168.137.0/24"}`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil { t.Fatal(err) }
+	cfg, err := loadConfig(path)
+	if err != nil { t.Fatal(err) }
+	if cfg.IdleStopMinutes != 180 || cfg.AbsoluteStopMinutes != 480 {
+		t.Fatalf("unexpected limits: idle=%d absolute=%d", cfg.IdleStopMinutes, cfg.AbsoluteStopMinutes)
+	}
 }
