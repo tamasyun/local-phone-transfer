@@ -9,5 +9,5 @@
   "wifiSsid": "PC-FileTransfer",
   "wifiPasswordLength": 16,
   "clearSendOnExit": true,
-  "autoStopMinutes": 60
+  "autoStopMinutes": 180
 }
