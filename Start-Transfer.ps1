@@ -1,3 +1,7 @@
+param(
+    [switch]$TestMode
+)
+
 $ErrorActionPreference = 'Stop'
 
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -56,6 +60,43 @@ $password = New-SessionPassword $passwordLength
 
 if ([string]::IsNullOrWhiteSpace($ssid) -or $ssid.Length -gt 32) {
     throw (Text 'invalidSsid' 'The Wi-Fi name is invalid.')
+}
+
+if ($TestMode) {
+    $env:LOCAL_PHONE_TRANSFER_TEST_MODE = '1'
+    $env:LOCAL_PHONE_TRANSFER_WIFI_SSID = 'TEST-MODE'
+    $env:LOCAL_PHONE_TRANSFER_WIFI_PASSWORD = 'LOCALHOST-ONLY'
+    try {
+        Write-Host ''
+        Write-Host '========================================' -ForegroundColor DarkYellow
+        Write-Host (' ' + (Text 'testModeTitle' 'Local Phone Transfer - TEST MODE')) -ForegroundColor Yellow
+        Write-Host '========================================' -ForegroundColor DarkYellow
+        Write-Host ''
+        Write-Host (Text 'testModeLocalOnly' 'The test server is available only from this PC (127.0.0.1).') -ForegroundColor Yellow
+        Write-Host (Text 'testModeNoWifi' 'Wi-Fi Direct and firewall changes are not used in test mode.') -ForegroundColor DarkGray
+        Write-Host ''
+
+        $process = Start-Process -FilePath $ExePath -WorkingDirectory $AppDir -PassThru
+        $process.WaitForExit()
+    }
+    catch {
+        $detail = $_.Exception.Message
+        try {
+            Add-Type -AssemblyName PresentationFramework
+            $message = (Text 'startupErrorBody' 'File transfer could not be started.') + "`n`n" + $detail
+            [System.Windows.MessageBox]::Show($message, (Text 'startupErrorTitle' 'File Transfer - Error'), 'OK', 'Error') | Out-Null
+        } catch {}
+        Write-Host $detail -ForegroundColor Red
+        exit 1
+    }
+    finally {
+        Remove-Item Env:LOCAL_PHONE_TRANSFER_TEST_MODE -ErrorAction SilentlyContinue
+        Remove-Item Env:LOCAL_PHONE_TRANSFER_WIFI_SSID -ErrorAction SilentlyContinue
+        Remove-Item Env:LOCAL_PHONE_TRANSFER_WIFI_PASSWORD -ErrorAction SilentlyContinue
+    }
+
+    Write-Host (Text 'finished' 'File transfer has ended.') -ForegroundColor Green
+    exit 0
 }
 
 $env:LOCAL_PHONE_TRANSFER_WIFI_SSID = $ssid
