@@ -33,7 +33,8 @@ type Config struct {
 	MaxUploadMB                int64  `json:"maxUploadMB"`
 	MinFreeSpaceMB             int64  `json:"minFreeSpaceMB"`
 	MaxConcurrentUploads       int    `json:"maxConcurrentUploads"`
-	IdleTimeoutMinutes         int    `json:"idleTimeoutMinutes"`
+	IdleStopMinutes            int    `json:"idleStopMinutes"`
+	AbsoluteStopMinutes        int    `json:"absoluteStopMinutes"`
 	PreferredInterfaceContains string `json:"preferredInterfaceContains"`
 	PreferredIPPrefix          string `json:"preferredIpPrefix"`
 	TransferSubnet             string `json:"transferSubnet"`
@@ -179,7 +180,7 @@ func main() {
 			}
 		}(srv)
 	}
-	go app.idleMonitor()
+	go app.timeoutMonitor()
 
 	time.Sleep(250 * time.Millisecond)
 	adminURL := fmt.Sprintf("http://127.0.0.1:%d/admin/%s/", cfg.Port, app.adminToken)
@@ -211,7 +212,8 @@ func loadConfig(path string) (Config, error) {
 		MaxUploadMB:                2048,
 		MinFreeSpaceMB:             1024,
 		MaxConcurrentUploads:       2,
-		IdleTimeoutMinutes:         180,
+		IdleStopMinutes:            180,
+		AbsoluteStopMinutes:        480,
 		PreferredInterfaceContains: "",
 		PreferredIPPrefix:          "192.168.137.",
 		TransferSubnet:             "192.168.137.0/24",
@@ -237,8 +239,11 @@ func loadConfig(path string) (Config, error) {
 	if cfg.MaxConcurrentUploads < 1 || cfg.MaxConcurrentUploads > 8 {
 		cfg.MaxConcurrentUploads = 2
 	}
-	if cfg.IdleTimeoutMinutes <= 0 {
-		cfg.IdleTimeoutMinutes = 180
+	if cfg.IdleStopMinutes <= 0 {
+		cfg.IdleStopMinutes = 180
+	}
+	if cfg.AbsoluteStopMinutes <= 0 {
+		cfg.AbsoluteStopMinutes = 480
 	}
 	if strings.TrimSpace(cfg.PreferredIPPrefix) == "" {
 		cfg.PreferredIPPrefix = "192.168.137."
@@ -420,17 +425,22 @@ func (a *App) touchActivity(reason string) {
 	}
 }
 
-func (a *App) idleMonitor() {
+func (a *App) timeoutMonitor() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
+			now := time.Now()
 			a.mu.RLock()
 			last := a.lastActivity
 			a.mu.RUnlock()
-			if time.Since(last) >= time.Duration(a.cfg.IdleTimeoutMinutes)*time.Minute {
+			if now.Sub(last) >= time.Duration(a.cfg.IdleStopMinutes)*time.Minute {
 				a.shutdown("idle_timeout")
+				return
+			}
+			if now.Sub(a.started) >= time.Duration(a.cfg.AbsoluteStopMinutes)*time.Minute {
+				a.shutdown("absolute_timeout")
 				return
 			}
 		case <-a.done:
@@ -439,15 +449,20 @@ func (a *App) idleMonitor() {
 	}
 }
 
-func (a *App) idleRemainingSeconds() int64 {
+func (a *App) timeoutState() (idleRemaining, absoluteRemaining int64) {
+	now := time.Now()
 	a.mu.RLock()
 	last := a.lastActivity
 	a.mu.RUnlock()
-	remaining := int64((time.Duration(a.cfg.IdleTimeoutMinutes)*time.Minute - time.Since(last)).Seconds())
-	if remaining < 0 {
-		return 0
+	idleRemaining = int64((time.Duration(a.cfg.IdleStopMinutes)*time.Minute - now.Sub(last)).Seconds())
+	absoluteRemaining = int64((time.Duration(a.cfg.AbsoluteStopMinutes)*time.Minute - now.Sub(a.started)).Seconds())
+	if idleRemaining < 0 {
+		idleRemaining = 0
 	}
-	return remaining
+	if absoluteRemaining < 0 {
+		absoluteRemaining = 0
+	}
+	return
 }
 
 func (a *App) shutdown(reason string) {
@@ -496,12 +511,12 @@ func (a *App) handleQR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePhone(w http.ResponseWriter, r *http.Request) {
-	if !a.allowedPhoneRequest(r) {
+	prefix := "/s/" + a.phoneToken
+	if !strings.HasPrefix(r.URL.Path, prefix) {
 		http.NotFound(w, r)
 		return
 	}
-	prefix := "/s/" + a.phoneToken
-	if !strings.HasPrefix(r.URL.Path, prefix) {
+	if !a.allowedPhoneRequest(r) {
 		http.NotFound(w, r)
 		return
 	}
@@ -734,13 +749,14 @@ func (a *App) adminPage(w http.ResponseWriter) {
 func (a *App) adminStatus(w http.ResponseWriter) {
 	recv, _ := listFiles(a.receiveDir)
 	send, _ := listFiles(a.sendDir)
+	idleRemaining, absoluteRemaining := a.timeoutState()
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"receive":            recv,
-		"send":               send,
-		"testMode":           a.testMode,
-		"idleRemainingSec":   a.idleRemainingSeconds(),
-		"idleTimeoutMinutes": a.cfg.IdleTimeoutMinutes,
+		"receive":              recv,
+		"send":                 send,
+		"testMode":             a.testMode,
+		"idleRemainingSec":     idleRemaining,
+		"absoluteRemainingSec": absoluteRemaining,
 	})
 }
 
