@@ -2,9 +2,37 @@ $ErrorActionPreference = 'Stop'
 
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigPath = Join-Path $AppDir 'transfer-config.json'
+$MessagesPath = Join-Path $AppDir 'messages.json'
+
+function Load-Messages {
+    if (Test-Path -LiteralPath $MessagesPath) {
+        try { return Get-Content -LiteralPath $MessagesPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+    }
+    return $null
+}
+
+$Messages = Load-Messages
+function Text([string]$name, [string]$fallback) {
+    if ($null -ne $Messages -and $null -ne $Messages.$name) { return [string]$Messages.$name }
+    return $fallback
+}
+
+function New-SessionPassword([int]$length) {
+    if ($length -lt 12) { $length = 12 }
+    if ($length -gt 32) { $length = 32 }
+    $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $bytes = New-Object byte[] $length
+        $rng.GetBytes($bytes)
+        $sb = New-Object System.Text.StringBuilder
+        foreach ($b in $bytes) { [void]$sb.Append($chars[$b % $chars.Length]) }
+        return $sb.ToString()
+    } finally { $rng.Dispose() }
+}
 
 if (!(Test-Path -LiteralPath $ConfigPath)) {
-    throw "transfer-config.json not found: $ConfigPath"
+    throw (Text 'configMissing' 'transfer-config.json was not found.')
 }
 
 $allExe = Get-ChildItem -LiteralPath $AppDir -Filter '*.exe' -File
@@ -17,19 +45,21 @@ if ($arch -eq 'Arm64' -and $null -ne $exeArm) {
 } elseif ($null -ne $exeX64) {
     $ExePath = $exeX64.FullName
 } else {
-    throw 'Transfer executable not found.'
+    throw (Text 'exeMissing' 'Transfer executable was not found.')
 }
 
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $ssid = [string]$config.wifiSsid
-$password = [string]$config.wifiPassword
+$passwordLength = 16
+if ($null -ne $config.wifiPasswordLength) { $passwordLength = [int]$config.wifiPasswordLength }
+$password = New-SessionPassword $passwordLength
 
 if ([string]::IsNullOrWhiteSpace($ssid) -or $ssid.Length -gt 32) {
-    throw 'wifiSsid must be between 1 and 32 characters.'
+    throw (Text 'invalidSsid' 'The Wi-Fi name is invalid.')
 }
-if ($password.Length -lt 8 -or $password.Length -gt 63) {
-    throw 'wifiPassword must be between 8 and 63 characters.'
-}
+
+$env:LOCAL_PHONE_TRANSFER_WIFI_SSID = $ssid
+$env:LOCAL_PHONE_TRANSFER_WIFI_PASSWORD = $password
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $PublisherType = [Windows.Devices.WiFiDirect.WiFiDirectAdvertisementPublisher, Windows.Devices.WiFiDirect, ContentType=WindowsRuntime]
@@ -50,8 +80,12 @@ try {
     $legacy.Passphrase = $credential
 
     Write-Host ''
-    Write-Host 'Starting local phone transfer...' -ForegroundColor Cyan
-    Write-Host "  Wi-Fi: $ssid"
+    Write-Host '========================================' -ForegroundColor DarkGray
+    Write-Host (' ' + (Text 'title' 'Local Phone Transfer')) -ForegroundColor White
+    Write-Host '========================================' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host (Text 'startingWifi' 'Preparing the transfer Wi-Fi...') -ForegroundColor Cyan
+    Write-Host ((Text 'wifiNameLabel' 'Wi-Fi name') + ': ' + $ssid)
 
     $publisher.Start()
 
@@ -61,11 +95,12 @@ try {
     }
 
     if ($publisher.Status.ToString() -ne 'Started') {
-        throw "Could not start Wi-Fi Direct. Status=$($publisher.Status). Turn off Windows Mobile Hotspot, turn Wi-Fi on, and try again."
+        throw ((Text 'wifiStartFailed' 'Could not start the transfer Wi-Fi.') + ' Status=' + $publisher.Status)
     }
 
-    Write-Host 'Local transfer Wi-Fi started.' -ForegroundColor Green
-    Write-Host 'Keep this window open until the transfer session ends.'
+    Write-Host (Text 'wifiStarted' 'Transfer Wi-Fi started.') -ForegroundColor Green
+    Write-Host (Text 'openingPanel' 'Opening the operation screen...')
+    Write-Host (Text 'keepWindowOpen' 'Keep this window open until file transfer is finished.') -ForegroundColor DarkGray
     Write-Host ''
 
     Start-Sleep -Milliseconds 1000
@@ -73,19 +108,22 @@ try {
     $process.WaitForExit()
 }
 catch {
+    $detail = $_.Exception.Message
     try {
         Add-Type -AssemblyName PresentationFramework
-        [System.Windows.MessageBox]::Show(
-            $_.Exception.Message,
-            'Local Phone Transfer - Startup Error',
-            'OK',
-            'Error'
-        ) | Out-Null
+        $message = (Text 'startupErrorBody' 'File transfer could not be started.') + "`n`n" + $detail
+        [System.Windows.MessageBox]::Show($message, (Text 'startupErrorTitle' 'File Transfer - Error'), 'OK', 'Error') | Out-Null
     } catch {}
-    throw
+    Write-Host $detail -ForegroundColor Red
+    exit 1
 }
 finally {
     if ($null -ne $publisher) {
+        Write-Host (Text 'stoppingWifi' 'Stopping the transfer Wi-Fi...') -ForegroundColor DarkGray
         try { $publisher.Stop() } catch {}
     }
+    Remove-Item Env:LOCAL_PHONE_TRANSFER_WIFI_SSID -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_PHONE_TRANSFER_WIFI_PASSWORD -ErrorAction SilentlyContinue
 }
+
+Write-Host (Text 'finished' 'File transfer has ended.') -ForegroundColor Green
