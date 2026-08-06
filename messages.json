@@ -22,5 +22,8 @@
   "startupErrorTitle": "ファイル転送 - 起動エラー",
   "startupErrorBody": "ファイル転送を開始できませんでした。",
   "stoppingWifi": "転送用Wi-Fiを停止しています...",
-  "finished": "ファイル転送を終了しました。"
+  "finished": "ファイル転送を終了しました。",
+  "testModeTitle": "スマホ ファイル転送 - VMテストモード",
+  "testModeLocalOnly": "テスト用サーバーはこのWindows内（127.0.0.1）からのみアクセスできます。",
+  "testModeNoWifi": "テストモードではWi-Fi Directを起動せず、ファイアウォール設定も変更しません。"
 }
