@@ -2,13 +2,17 @@ $ErrorActionPreference = 'Stop'
 
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigPath = Join-Path $AppDir 'transfer-config.json'
-$ExePath = Join-Path $AppDir 'スマホファイル転送.exe'
+$ExePathX64 = Join-Path $AppDir 'スマホファイル転送.exe'
+$ExePathArm64 = Join-Path $AppDir 'スマホファイル転送_ARM64.exe'
 
 if (!(Test-Path -LiteralPath $ConfigPath)) {
     throw "transfer-config.json が見つかりません: $ConfigPath"
 }
+
+$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+$ExePath = if ($arch -eq 'Arm64' -and (Test-Path -LiteralPath $ExePathArm64)) { $ExePathArm64 } else { $ExePathX64 }
 if (!(Test-Path -LiteralPath $ExePath)) {
-    throw "スマホファイル転送.exe が見つかりません: $ExePath"
+    throw "転送アプリ本体が見つかりません: $ExePath"
 }
 
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -22,11 +26,7 @@ if ($password.Length -lt 8 -or $password.Length -gt 63) {
     throw 'wifiPassword は8〜63文字で指定してください。'
 }
 
-# Windows PowerShell 5.1 は Windows Runtime (WinRT) を直接利用できます。
-# Wi-Fi Direct Legacy mode を有効にすると、iPhone/Android からは通常の
-# WPA2 Wi-Fiアクセスポイントとして見えます。インターネット接続は不要です。
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
-
 $PublisherType = [Windows.Devices.WiFiDirect.WiFiDirectAdvertisementPublisher, Windows.Devices.WiFiDirect, ContentType=WindowsRuntime]
 $CredentialType = [Windows.Security.Credentials.PasswordCredential, Windows.Security.Credentials, ContentType=WindowsRuntime]
 
@@ -45,8 +45,8 @@ try {
     $legacy.Passphrase = $credential
 
     Write-Host ''
-    Write-Host '転送専用Wi-Fiを開始しています...' -ForegroundColor Cyan
-    Write-Host "  SSID: $ssid"
+    Write-Host 'スマホファイル転送を開始しています...' -ForegroundColor Cyan
+    Write-Host "  Wi-Fi: $ssid"
 
     $publisher.Start()
 
@@ -56,26 +56,27 @@ try {
     }
 
     if ($publisher.Status.ToString() -ne 'Started') {
-        throw "Wi-Fi Directを開始できませんでした。Status=$($publisher.Status)。Windowsのモバイル ホットスポットがONならOFFにし、Wi-FiをONにして再試行してください。"
+        throw "転送専用Wi-Fiを開始できませんでした。Status=$($publisher.Status)。Windowsのモバイル ホットスポットをOFF、Wi-FiをONにして再試行してください。"
     }
 
     Write-Host '転送専用Wi-Fiを開始しました。' -ForegroundColor Green
-    Write-Host 'このPowerShellウィンドウは転送終了まで閉じないでください。'
+    Write-Host '転送が終わるまで、このウィンドウは閉じないでください。'
     Write-Host ''
 
-    # Wi-Fi Direct仮想アダプターにIPv4が付くまで少し待ってから本体を起動します。
-    Start-Sleep -Milliseconds 800
+    Start-Sleep -Milliseconds 1000
     $process = Start-Process -FilePath $ExePath -WorkingDirectory $AppDir -PassThru
     $process.WaitForExit()
 }
 catch {
-    Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show(
-        $_.Exception.Message,
-        'ルーターなしファイル転送 - 起動エラー',
-        'OK',
-        'Error'
-    ) | Out-Null
+    try {
+        Add-Type -AssemblyName PresentationFramework
+        [System.Windows.MessageBox]::Show(
+            $_.Exception.Message,
+            'スマホファイル転送 - 起動エラー',
+            'OK',
+            'Error'
+        ) | Out-Null
+    } catch {}
     throw
 }
 finally {
