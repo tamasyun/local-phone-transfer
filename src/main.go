@@ -33,8 +33,7 @@ type Config struct {
 	MaxUploadMB                int64  `json:"maxUploadMB"`
 	MinFreeSpaceMB             int64  `json:"minFreeSpaceMB"`
 	MaxConcurrentUploads       int    `json:"maxConcurrentUploads"`
-	IdleStopMinutes            int    `json:"idleStopMinutes"`
-	AbsoluteStopMinutes        int    `json:"absoluteStopMinutes"`
+	IdleTimeoutMinutes         int    `json:"idleTimeoutMinutes"`
 	PreferredInterfaceContains string `json:"preferredInterfaceContains"`
 	PreferredIPPrefix          string `json:"preferredIpPrefix"`
 	TransferSubnet             string `json:"transferSubnet"`
@@ -44,21 +43,20 @@ type Config struct {
 }
 
 type App struct {
-	cfg        Config
-	exeDir     string
-	receiveDir string
-	sendDir    string
-	phoneToken string
-	adminToken string
-	servers    []*http.Server
-	started    time.Time
-	testMode   bool
-	transferIP string
-	transferNet *net.IPNet
-	logger     *log.Logger
-	logFile    *os.File
-	uploadSlots chan struct{}
-
+	cfg          Config
+	exeDir       string
+	receiveDir   string
+	sendDir      string
+	phoneToken   string
+	adminToken   string
+	servers      []*http.Server
+	started      time.Time
+	testMode     bool
+	transferIP   string
+	transferNet  *net.IPNet
+	logger       *log.Logger
+	logFile      *os.File
+	uploadSlots  chan struct{}
 	mu           sync.RWMutex
 	lastActivity time.Time
 	phoneIP      string
@@ -110,8 +108,8 @@ func main() {
 		return
 	}
 
-	// Remove incomplete uploads left by a crash or power loss. If sharing files
-	// are configured as session-only, also remove stale files from a prior run.
+	// Remove incomplete uploads left by a crash or power loss. Sharing files are
+	// session-only when clearSendOnExit is enabled, so stale files are removed too.
 	_ = cleanupUploadTemps(recv)
 	_ = cleanupUploadTemps(send)
 	if cfg.ClearSendOnExit {
@@ -151,8 +149,8 @@ func main() {
 	app.routes(mux)
 	handler := securityHeaders(mux)
 
-	// Admin UI always listens only on loopback. Production phone traffic listens
-	// only on the Wi-Fi Direct address, never on every NIC.
+	// The admin UI is loopback-only. Phone traffic listens only on the Wi-Fi
+	// Direct address, never on every NIC or the normal LAN interface.
 	addresses := []string{fmt.Sprintf("127.0.0.1:%d", cfg.Port)}
 	if !testMode {
 		ip, err := waitForTransferIP(cfg, 8*time.Second)
@@ -181,23 +179,23 @@ func main() {
 			}
 		}(srv)
 	}
-	go app.timeoutMonitor()
+	go app.idleMonitor()
 
 	time.Sleep(250 * time.Millisecond)
 	adminURL := fmt.Sprintf("http://127.0.0.1:%d/admin/%s/", cfg.Port, app.adminToken)
 	if err := openBrowser(adminURL); err != nil {
-		app.logger.Printf("open_admin_browser error=%q", err)
+		app.logger.Printf("open_admin_browser_failed")
 	}
 	if testMode {
 		phoneURL := fmt.Sprintf("http://127.0.0.1:%d/s/%s/", cfg.Port, app.phoneToken)
 		if err := openBrowser(phoneURL); err != nil {
-			app.logger.Printf("open_test_phone_browser error=%q", err)
+			app.logger.Printf("open_test_phone_browser_failed")
 		}
 	}
 
 	select {
 	case err := <-errCh:
-		app.logger.Printf("server_error error=%q", err)
+		app.logger.Printf("server_error")
 		fatalDialog("サーバー起動エラー", fmt.Sprintf("ポート %d を使用できません。\n\n%s", cfg.Port, err))
 	case <-app.done:
 		app.logger.Printf("session_end")
@@ -213,8 +211,7 @@ func loadConfig(path string) (Config, error) {
 		MaxUploadMB:                2048,
 		MinFreeSpaceMB:             1024,
 		MaxConcurrentUploads:       2,
-		IdleStopMinutes:            180,
-		AbsoluteStopMinutes:        480,
+		IdleTimeoutMinutes:         180,
 		PreferredInterfaceContains: "",
 		PreferredIPPrefix:          "192.168.137.",
 		TransferSubnet:             "192.168.137.0/24",
@@ -240,11 +237,8 @@ func loadConfig(path string) (Config, error) {
 	if cfg.MaxConcurrentUploads < 1 || cfg.MaxConcurrentUploads > 8 {
 		cfg.MaxConcurrentUploads = 2
 	}
-	if cfg.IdleStopMinutes <= 0 {
-		cfg.IdleStopMinutes = 180
-	}
-	if cfg.AbsoluteStopMinutes <= 0 {
-		cfg.AbsoluteStopMinutes = 480
+	if cfg.IdleTimeoutMinutes <= 0 {
+		cfg.IdleTimeoutMinutes = 180
 	}
 	if strings.TrimSpace(cfg.PreferredIPPrefix) == "" {
 		cfg.PreferredIPPrefix = "192.168.137."
@@ -412,7 +406,7 @@ func (a *App) allowedPhoneRequest(r *http.Request) bool {
 	defer a.mu.Unlock()
 	if a.phoneIP == "" {
 		a.phoneIP = key
-		a.logger.Printf("phone_bound ip=%s", key)
+		a.logger.Printf("phone_bound")
 	}
 	return a.phoneIP == key
 }
@@ -426,22 +420,17 @@ func (a *App) touchActivity(reason string) {
 	}
 }
 
-func (a *App) timeoutMonitor() {
+func (a *App) idleMonitor() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			now := time.Now()
 			a.mu.RLock()
 			last := a.lastActivity
 			a.mu.RUnlock()
-			if now.Sub(last) >= time.Duration(a.cfg.IdleStopMinutes)*time.Minute {
+			if time.Since(last) >= time.Duration(a.cfg.IdleTimeoutMinutes)*time.Minute {
 				a.shutdown("idle_timeout")
-				return
-			}
-			if now.Sub(a.started) >= time.Duration(a.cfg.AbsoluteStopMinutes)*time.Minute {
-				a.shutdown("absolute_timeout")
 				return
 			}
 		case <-a.done:
@@ -450,20 +439,15 @@ func (a *App) timeoutMonitor() {
 	}
 }
 
-func (a *App) timeoutState() (idleRemaining, absoluteRemaining int64) {
-	now := time.Now()
+func (a *App) idleRemainingSeconds() int64 {
 	a.mu.RLock()
 	last := a.lastActivity
 	a.mu.RUnlock()
-	idleRemaining = int64((time.Duration(a.cfg.IdleStopMinutes)*time.Minute - now.Sub(last)).Seconds())
-	absoluteRemaining = int64((time.Duration(a.cfg.AbsoluteStopMinutes)*time.Minute - now.Sub(a.started)).Seconds())
-	if idleRemaining < 0 {
-		idleRemaining = 0
+	remaining := int64((time.Duration(a.cfg.IdleTimeoutMinutes)*time.Minute - time.Since(last)).Seconds())
+	if remaining < 0 {
+		return 0
 	}
-	if absoluteRemaining < 0 {
-		absoluteRemaining = 0
-	}
-	return
+	return remaining
 }
 
 func (a *App) shutdown(reason string) {
@@ -622,7 +606,7 @@ func (a *App) uploadFile(w http.ResponseWriter, r *http.Request, destDir, activi
 		return
 	}
 	a.touchActivity(activity + "_complete")
-	a.logger.Printf("file_saved kind=%s name=%q bytes=%d", activity, filepath.Base(finalPath), n)
+	a.logger.Printf("file_saved kind=%s bytes=%d", activity, n)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "name": filepath.Base(finalPath), "bytes": n})
 }
@@ -681,7 +665,7 @@ func (a *App) downloadFile(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	a.touchActivity("phone_download_start")
-	a.logger.Printf("file_download name=%q bytes=%d", name, st.Size())
+	a.logger.Printf("file_download bytes=%d", st.Size())
 	ctype := mime.TypeByExtension(filepath.Ext(name))
 	if ctype == "" {
 		ctype = "application/octet-stream"
@@ -750,14 +734,13 @@ func (a *App) adminPage(w http.ResponseWriter) {
 func (a *App) adminStatus(w http.ResponseWriter) {
 	recv, _ := listFiles(a.receiveDir)
 	send, _ := listFiles(a.sendDir)
-	idleRemaining, absoluteRemaining := a.timeoutState()
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"receive": recv,
-		"send": send,
-		"testMode": a.testMode,
-		"idleRemainingSec": idleRemaining,
-		"absoluteRemainingSec": absoluteRemaining,
+		"receive":            recv,
+		"send":               send,
+		"testMode":           a.testMode,
+		"idleRemainingSec":   a.idleRemainingSeconds(),
+		"idleTimeoutMinutes": a.cfg.IdleTimeoutMinutes,
 	})
 }
 
