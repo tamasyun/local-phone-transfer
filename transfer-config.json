@@ -1,0 +1,13 @@
+{
+  "deviceName": "共用PC",
+  "port": 8765,
+  "receiveDir": "受信ファイル",
+  "sendDir": "送信ファイル",
+  "maxUploadMB": 2048,
+  "preferredInterfaceContains": "",
+  "preferredIpPrefix": "192.168.50.",
+  "wifiSsid": "PC-FileTransfer",
+  "wifiPassword": "CHANGE-ME",
+  "clearSendOnExit": true,
+  "autoStopMinutes": 60
+}
