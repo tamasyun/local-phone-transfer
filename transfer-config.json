@@ -4,10 +4,13 @@
   "receiveDir": "受信ファイル",
   "sendDir": "送信ファイル",
   "maxUploadMB": 2048,
+  "minFreeSpaceMB": 1024,
+  "maxConcurrentUploads": 2,
+  "idleTimeoutMinutes": 180,
   "preferredInterfaceContains": "",
   "preferredIpPrefix": "192.168.137.",
+  "firewallRemoteSubnet": "192.168.137.0/24",
   "wifiSsid": "PC-FileTransfer",
   "wifiPasswordLength": 16,
-  "clearSendOnExit": true,
-  "autoStopMinutes": 180
+  "clearSendOnExit": true
 }
