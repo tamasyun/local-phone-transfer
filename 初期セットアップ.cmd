@@ -19,7 +19,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$exe=$allExe | Where-Object { $_.Name -notlike '*_ARM64.exe' } | Select-Object -First 1;" ^
   "$exeArm=$allExe | Where-Object { $_.Name -like '*_ARM64.exe' } | Select-Object -First 1;" ^
   "if($null -eq $exe){throw 'Transfer executable not found.'};" ^
-  "$subnet=[string]$cfg.firewallRemoteSubnet; if([string]::IsNullOrWhiteSpace($subnet)){throw 'firewallRemoteSubnet is missing.'};" ^
+  "$subnet=[string]$cfg.transferSubnet; if([string]::IsNullOrWhiteSpace($subnet)){throw 'transferSubnet is missing.'};" ^
   "$name='Local Phone Transfer';" ^
   "$nameArm='Local Phone Transfer ARM64';" ^
   "Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
