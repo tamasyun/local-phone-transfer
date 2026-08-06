@@ -25,13 +25,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "Get-NetFirewallRule -DisplayName $nameArm -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
   "New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exe.FullName -RemoteAddress LocalSubnet -Profile Any | Out-Null;" ^
   "if($null -ne $exeArm){New-NetFirewallRule -DisplayName $nameArm -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exeArm.FullName -RemoteAddress LocalSubnet -Profile Any | Out-Null};" ^
-  "$launcher=Get-ChildItem -LiteralPath $dir -Filter '*.cmd' -File | Where-Object { $_.Name -ne '初期セットアップ.cmd' -and $_.Name -ne 'ファイアウォール設定を削除.cmd' -and $_.Name -ne '設定を編集.cmd' } | Select-Object -First 1;" ^
-  "if($null -eq $launcher){throw 'Launcher CMD not found.'};" ^
+  "$launcher=Join-Path $dir 'LocalPhoneTransfer.cmd';" ^
+  "if(!(Test-Path -LiteralPath $launcher)){throw 'LocalPhoneTransfer.cmd not found.'};" ^
   "$desktop=[Environment]::GetFolderPath('Desktop');" ^
   "$shortcut=Join-Path $desktop 'Local Phone Transfer.lnk';" ^
   "$ws=New-Object -ComObject WScript.Shell;" ^
   "$sc=$ws.CreateShortcut($shortcut);" ^
-  "$sc.TargetPath=$launcher.FullName; $sc.WorkingDirectory=$dir; $sc.Description='Local file transfer for iPhone and Android'; $sc.Save();" ^
+  "$sc.TargetPath=$launcher; $sc.WorkingDirectory=$dir; $sc.Description='Local file transfer for iPhone and Android'; $sc.Save();" ^
   "Write-Host ''; Write-Host 'Firewall rules and desktop shortcut created.' -ForegroundColor Green;"
 
 if %errorlevel% neq 0 (
