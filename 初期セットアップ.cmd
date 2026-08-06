@@ -1,12 +1,11 @@
 @echo off
-chcp 65001 >nul
 setlocal
 set "APPDIR=%~dp0"
 set "SCRIPTFILE=%~f0"
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-  echo 管理者権限を要求します...
+  echo Requesting administrator privileges...
   powershell.exe -NoProfile -Command "Start-Process -FilePath $env:SCRIPTFILE -Verb RunAs"
   exit /b
 )
@@ -16,38 +15,38 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$dir=$env:APPDIR;" ^
   "$cfgPath=Join-Path $dir 'transfer-config.json';" ^
   "$cfg=Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json;" ^
-  "$exe=Join-Path $dir 'スマホファイル転送.exe';" ^
-  "$exeArm=Join-Path $dir 'スマホファイル転送_ARM64.exe';" ^
-  "if(!(Test-Path $exe)){throw 'スマホファイル転送.exe が見つかりません'};" ^
-  "$name='スマホファイル転送（ローカルネットワーク）';" ^
-  "$nameArm='スマホファイル転送 ARM64（ローカルネットワーク）';" ^
+  "$allExe=Get-ChildItem -LiteralPath $dir -Filter '*.exe' -File;" ^
+  "$exe=$allExe | Where-Object { $_.Name -notlike '*_ARM64.exe' } | Select-Object -First 1;" ^
+  "$exeArm=$allExe | Where-Object { $_.Name -like '*_ARM64.exe' } | Select-Object -First 1;" ^
+  "if($null -eq $exe){throw 'Transfer executable not found.'};" ^
+  "$name='Local Phone Transfer';" ^
+  "$nameArm='Local Phone Transfer ARM64';" ^
   "Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
   "Get-NetFirewallRule -DisplayName $nameArm -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
-  "New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exe -RemoteAddress LocalSubnet -Profile Any | Out-Null;" ^
-  "if(Test-Path $exeArm){New-NetFirewallRule -DisplayName $nameArm -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exeArm -RemoteAddress LocalSubnet -Profile Any | Out-Null};" ^
-  "$launcher=Join-Path $dir 'スマホファイル転送.cmd';" ^
+  "New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exe.FullName -RemoteAddress LocalSubnet -Profile Any | Out-Null;" ^
+  "if($null -ne $exeArm){New-NetFirewallRule -DisplayName $nameArm -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exeArm.FullName -RemoteAddress LocalSubnet -Profile Any | Out-Null};" ^
+  "$launcher=Get-ChildItem -LiteralPath $dir -Filter '*.cmd' -File | Where-Object { $_.Name -ne '初期セットアップ.cmd' -and $_.Name -ne 'ファイアウォール設定を削除.cmd' -and $_.Name -ne '設定を編集.cmd' } | Select-Object -First 1;" ^
+  "if($null -eq $launcher){throw 'Launcher CMD not found.'};" ^
   "$desktop=[Environment]::GetFolderPath('Desktop');" ^
-  "$shortcut=Join-Path $desktop 'スマホファイル転送.lnk';" ^
+  "$shortcut=Join-Path $desktop 'Local Phone Transfer.lnk';" ^
   "$ws=New-Object -ComObject WScript.Shell;" ^
   "$sc=$ws.CreateShortcut($shortcut);" ^
-  "$sc.TargetPath=$launcher; $sc.WorkingDirectory=$dir; $sc.Description='iPhone / Android と共用PCのファイル転送'; $sc.Save();" ^
-  "Write-Host ''; Write-Host 'ファイアウォール設定とデスクトップショートカットを作成しました。' -ForegroundColor Green;"
+  "$sc.TargetPath=$launcher.FullName; $sc.WorkingDirectory=$dir; $sc.Description='Local file transfer for iPhone and Android'; $sc.Save();" ^
+  "Write-Host ''; Write-Host 'Firewall rules and desktop shortcut created.' -ForegroundColor Green;"
 
 if %errorlevel% neq 0 (
   echo.
-  echo セットアップに失敗しました。
+  echo Setup failed.
   pause
   exit /b 1
 )
 
 echo.
 echo ================================================
-echo 初期セットアップが完了しました。
+echo Setup completed.
 echo ================================================
 echo.
-echo デスクトップの「スマホファイル転送」から起動できます。
-echo.
-echo transfer-config.json の wifiPassword が CHANGE-ME のままなら、
-echo 「設定を編集.cmd」から8文字以上のパスワードに変更してください。
+echo Start from the "Local Phone Transfer" desktop shortcut.
+echo If wifiPassword is still CHANGE-ME, edit transfer-config.json.
 echo.
 pause
