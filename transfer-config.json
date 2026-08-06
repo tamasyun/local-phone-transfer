@@ -7,7 +7,7 @@
   "preferredInterfaceContains": "",
   "preferredIpPrefix": "192.168.137.",
   "wifiSsid": "PC-FileTransfer",
-  "wifiPassword": "CHANGE-ME",
+  "wifiPasswordLength": 16,
   "clearSendOnExit": true,
   "autoStopMinutes": 60
 }
