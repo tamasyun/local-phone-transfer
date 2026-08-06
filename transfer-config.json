@@ -6,10 +6,11 @@
   "maxUploadMB": 2048,
   "minFreeSpaceMB": 1024,
   "maxConcurrentUploads": 2,
-  "idleTimeoutMinutes": 180,
+  "idleStopMinutes": 180,
+  "absoluteStopMinutes": 480,
   "preferredInterfaceContains": "",
   "preferredIpPrefix": "192.168.137.",
-  "firewallRemoteSubnet": "192.168.137.0/24",
+  "transferSubnet": "192.168.137.0/24",
   "wifiSsid": "PC-FileTransfer",
   "wifiPasswordLength": 16,
   "clearSendOnExit": true
