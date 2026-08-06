@@ -1,11 +1,10 @@
 @echo off
-chcp 65001 >nul
 setlocal
 set "APPDIR=%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APPDIR%Start-Transfer.ps1"
 if %errorlevel% neq 0 (
   echo.
-  echo スマホファイル転送の起動に失敗しました。
-  echo 上に表示されたエラー内容を確認してください。
+  echo Local Phone Transfer failed to start.
+  echo Check the error message above.
   pause
 )
