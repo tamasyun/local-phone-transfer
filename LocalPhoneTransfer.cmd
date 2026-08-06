@@ -1,10 +1,9 @@
 @echo off
 setlocal
 set "APPDIR=%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APPDIR%Start-Transfer.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APPDIR%Bootstrap.ps1"
 if %errorlevel% neq 0 (
   echo.
   echo Local Phone Transfer failed to start.
-  echo Check the error message above.
   pause
 )
