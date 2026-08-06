@@ -19,12 +19,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$exe=$allExe | Where-Object { $_.Name -notlike '*_ARM64.exe' } | Select-Object -First 1;" ^
   "$exeArm=$allExe | Where-Object { $_.Name -like '*_ARM64.exe' } | Select-Object -First 1;" ^
   "if($null -eq $exe){throw 'Transfer executable not found.'};" ^
+  "$subnet=[string]$cfg.firewallRemoteSubnet; if([string]::IsNullOrWhiteSpace($subnet)){throw 'firewallRemoteSubnet is missing.'};" ^
   "$name='Local Phone Transfer';" ^
   "$nameArm='Local Phone Transfer ARM64';" ^
   "Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
   "Get-NetFirewallRule -DisplayName $nameArm -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
-  "New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exe.FullName -RemoteAddress LocalSubnet -Profile Any | Out-Null;" ^
-  "if($null -ne $exeArm){New-NetFirewallRule -DisplayName $nameArm -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exeArm.FullName -RemoteAddress LocalSubnet -Profile Any | Out-Null};" ^
+  "New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exe.FullName -RemoteAddress $subnet -Profile Any | Out-Null;" ^
+  "if($null -ne $exeArm){New-NetFirewallRule -DisplayName $nameArm -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $exeArm.FullName -RemoteAddress $subnet -Profile Any | Out-Null};" ^
   "$launcher=Join-Path $dir 'LocalPhoneTransfer.cmd';" ^
   "if(!(Test-Path -LiteralPath $launcher)){throw 'LocalPhoneTransfer.cmd not found.'};" ^
   "$desktop=[Environment]::GetFolderPath('Desktop');" ^
@@ -47,6 +48,5 @@ echo Setup completed.
 echo ================================================
 echo.
 echo Start from the "Local Phone Transfer" desktop shortcut.
-echo If wifiPassword is still CHANGE-ME, edit transfer-config.json.
 echo.
 pause
