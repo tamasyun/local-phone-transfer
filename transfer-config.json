@@ -5,7 +5,7 @@
   "sendDir": "送信ファイル",
   "maxUploadMB": 2048,
   "preferredInterfaceContains": "",
-  "preferredIpPrefix": "192.168.50.",
+  "preferredIpPrefix": "192.168.137.",
   "wifiSsid": "PC-FileTransfer",
   "wifiPassword": "CHANGE-ME",
   "clearSendOnExit": true,
