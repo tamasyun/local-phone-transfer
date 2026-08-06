@@ -27,12 +27,12 @@ function Test-BinaryHashes {
                 $expected[$matches[2]] = $matches[1].ToLowerInvariant()
             }
         }
-        $executables = @(Get-ChildItem -LiteralPath $AppDir -Filter '*.exe' -File | Where-Object { $_.Name -like '*転送*.exe' })
-        if ($executables.Count -eq 0) { return $false }
-        foreach ($exe in $executables) {
-            if (!$expected.ContainsKey($exe.Name)) { return $false }
-            $actual = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $expected[$exe.Name]) { return $false }
+        if ($expected.Count -eq 0) { return $false }
+        foreach ($name in $expected.Keys) {
+            $path = Join-Path $AppDir $name
+            if (!(Test-Path -LiteralPath $path -PathType Leaf)) { return $false }
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected[$name]) { return $false }
         }
         return $true
     } catch { return $false }
