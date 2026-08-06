@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-windows-main
+  cancel-in-progress: false
+
 jobs:
   build:
     if: github.actor != 'github-actions[bot]'
@@ -36,14 +40,14 @@ jobs:
         env:
           GOOS: windows
           GOARCH: amd64
-        run: go build -trimpath -ldflags='-s -w' -o '../スマホファイル転送.exe' .
+        run: go build -trimpath -ldflags='-s -w -H=windowsgui' -o '../スマホファイル転送.exe' .
 
       - name: Build ARM64
         working-directory: src
         env:
           GOOS: windows
           GOARCH: arm64
-        run: go build -trimpath -ldflags='-s -w' -o '../スマホファイル転送_ARM64.exe' .
+        run: go build -trimpath -ldflags='-s -w -H=windowsgui' -o '../スマホファイル転送_ARM64.exe' .
 
       - name: Update checksums
         run: sha256sum 'スマホファイル転送.exe' 'スマホファイル転送_ARM64.exe' > SHA256SUMS.txt
@@ -58,4 +62,5 @@ jobs:
             exit 0
           fi
           git commit -m 'Build updated Windows binaries [skip ci]'
+          git pull --rebase origin main
           git push origin main
