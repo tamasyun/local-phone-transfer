@@ -50,6 +50,7 @@ type App struct {
 	started      time.Time
 	mu           sync.RWMutex
 	preferredURL string
+	testMode     bool
 }
 
 type NetURL struct {
@@ -84,6 +85,7 @@ func main() {
 	if v := os.Getenv("LOCAL_PHONE_TRANSFER_WIFI_PASSWORD"); v != "" {
 		cfg.WiFiPassword = v
 	}
+	testMode := strings.TrimSpace(os.Getenv("LOCAL_PHONE_TRANSFER_TEST_MODE")) == "1"
 	recv := resolveDir(exeDir, cfg.ReceiveDir)
 	send := resolveDir(exeDir, cfg.SendDir)
 	if err := os.MkdirAll(recv, 0755); err != nil {
@@ -103,6 +105,7 @@ func main() {
 		phoneToken: randomToken(12),
 		adminToken: randomToken(16),
 		started:    time.Now(),
+		testMode:   testMode,
 	}
 	urls := app.networkURLs()
 	if len(urls) > 0 {
@@ -112,7 +115,7 @@ func main() {
 	mux := http.NewServeMux()
 	app.routes(mux)
 	app.server = &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Addr:              listenAddress(cfg.Port, testMode),
 		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -143,12 +146,26 @@ func main() {
 	if err := openBrowser(adminURL); err != nil {
 		log.Printf("open browser: %v", err)
 	}
+	if testMode {
+		time.Sleep(250 * time.Millisecond)
+		phoneURL := fmt.Sprintf("http://127.0.0.1:%d/s/%s/", cfg.Port, app.phoneToken)
+		if err := openBrowser(phoneURL); err != nil {
+			log.Printf("open test phone browser: %v", err)
+		}
+	}
 
 	select {
 	case err := <-errCh:
 		fatalDialog("サーバー起動エラー", fmt.Sprintf("ポート %d を使用できません。\n\n%s", cfg.Port, err))
 	case <-make(chan struct{}):
 	}
+}
+
+func listenAddress(port int, testMode bool) string {
+	if testMode {
+		return fmt.Sprintf("127.0.0.1:%d", port)
+	}
+	return fmt.Sprintf(":%d", port)
 }
 
 func loadConfig(path string) (Config, error) {
@@ -222,6 +239,8 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), usb=(), serial=()")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -392,6 +411,14 @@ func (a *App) handleAdmin(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) adminPage(w http.ResponseWriter, r *http.Request) {
 	urls := a.networkURLs()
+	wifiSSID := a.cfg.WiFiSSID
+	wifiPassword := a.cfg.WiFiPassword
+	wifiQR := wifiQRText(wifiSSID, wifiPassword)
+	if a.testMode {
+		wifiSSID = "TEST MODE"
+		wifiPassword = "Wi-Fiは使用しません"
+		wifiQR = ""
+	}
 	data := struct {
 		DeviceName   string
 		AdminToken   string
@@ -406,8 +433,8 @@ func (a *App) adminPage(w http.ResponseWriter, r *http.Request) {
 		MaxMB        int64
 	}{
 		DeviceName: a.cfg.DeviceName, AdminToken: a.adminToken, PhoneToken: a.phoneToken, Port: a.cfg.Port,
-		URLs: urls, WiFiSSID: a.cfg.WiFiSSID, WiFiPassword: a.cfg.WiFiPassword,
-		WiFiQR: wifiQRText(a.cfg.WiFiSSID, a.cfg.WiFiPassword), ReceiveDir: a.receiveDir, SendDir: a.sendDir, MaxMB: a.cfg.MaxUploadMB,
+		URLs: urls, WiFiSSID: wifiSSID, WiFiPassword: wifiPassword,
+		WiFiQR: wifiQR, ReceiveDir: a.receiveDir, SendDir: a.sendDir, MaxMB: a.cfg.MaxUploadMB,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = adminTemplate.Execute(w, data)
@@ -417,7 +444,7 @@ func (a *App) adminStatus(w http.ResponseWriter, r *http.Request) {
 	recv, _ := listFiles(a.receiveDir)
 	send, _ := listFiles(a.sendDir)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]any{"receive": recv, "send": send, "uptimeSec": int(time.Since(a.started).Seconds()), "autoStopMinutes": a.cfg.AutoStopMinutes})
+	_ = json.NewEncoder(w).Encode(map[string]any{"receive": recv, "send": send, "uptimeSec": int(time.Since(a.started).Seconds()), "autoStopMinutes": a.cfg.AutoStopMinutes, "testMode": a.testMode})
 }
 
 func (a *App) adminOpenFolder(w http.ResponseWriter, r *http.Request) {
@@ -477,6 +504,9 @@ func uniquePath(dir, name string) string {
 }
 
 func (a *App) networkURLs() []NetURL {
+	if a.testMode {
+		return []NetURL{{Interface: "localhost (test mode)", IP: "127.0.0.1", URL: fmt.Sprintf("http://127.0.0.1:%d/s/%s/", a.cfg.Port, a.phoneToken), Preferred: true}}
+	}
 	ifaces, _ := net.Interfaces(); var out []NetURL
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 { continue }
