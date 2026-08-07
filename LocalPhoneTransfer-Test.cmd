@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set "APPDIR=%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APPDIR%Start-Transfer.ps1" -TestMode
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APPDIR%Bootstrap.ps1" -TestMode
 if %errorlevel% neq 0 (
   echo.
   echo Test mode failed to start.
