@@ -1,0 +1,84 @@
+from pathlib import Path
+
+main = Path('src/main.go')
+s = main.read_text(encoding='utf-8')
+old = '\tcase rest == "/api/status" && r.Method == http.MethodGet:\n\t\ta.adminStatus(w)\n\tcase rest == "/upload" && r.Method == http.MethodPost:\n'
+new = '\tcase rest == "/api/status" && r.Method == http.MethodGet:\n\t\ta.adminStatus(w)\n\tcase rest == "/locale" && r.Method == http.MethodPost:\n\t\ta.adminLocale(w, r)\n\tcase rest == "/upload" && r.Method == http.MethodPost:\n'
+if old not in s:
+    raise SystemExit('main.go route anchor not found')
+main.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+Path('src/locale_settings.go').write_text(r'''package main
+
+import (
+    "encoding/json"
+    "net/http"
+    "os"
+    "path/filepath"
+    "strings"
+)
+
+// adminLocale updates only the locale field in transfer-config.json.
+// The admin route already restricts this endpoint to loopback requests with
+// the per-session admin token.
+func (a *App) adminLocale(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, "invalid request", http.StatusBadRequest)
+        return
+    }
+    lang := strings.TrimSpace(r.FormValue("locale"))
+    if lang != "ja" && lang != "en" {
+        http.Error(w, "unsupported locale", http.StatusBadRequest)
+        return
+    }
+
+    configPath := filepath.Join(a.exeDir, "transfer-config.json")
+    b, err := os.ReadFile(configPath)
+    if err != nil {
+        http.Error(w, "could not read settings", http.StatusInternalServerError)
+        return
+    }
+    raw := map[string]any{}
+    if err := json.Unmarshal(b, &raw); err != nil {
+        http.Error(w, "settings JSON is invalid", http.StatusInternalServerError)
+        return
+    }
+    raw["locale"] = lang
+    out, err := json.MarshalIndent(raw, "", "  ")
+    if err != nil {
+        http.Error(w, "could not encode settings", http.StatusInternalServerError)
+        return
+    }
+    out = append(out, '\n')
+    if err := os.WriteFile(configPath, out, 0644); err != nil {
+        http.Error(w, "could not save settings", http.StatusInternalServerError)
+        return
+    }
+    if err := loadLocale(a.exeDir, lang); err != nil {
+        http.Error(w, "could not load locale", http.StatusInternalServerError)
+        return
+    }
+    a.touchActivity("admin_locale_change")
+    w.WriteHeader(http.StatusNoContent)
+}
+''', encoding='utf-8')
+
+tpl = Path('src/template_admin.go')
+s = tpl.read_text(encoding='utf-8')
+css_old = '.badge{font-size:12px;font-weight:700;background:var(--soft);padding:6px 9px;border-radius:6px;color:#555}'
+css_new = '.topActions{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}.languageControl{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--sub);font-weight:650}.languageControl select{font:inherit;font-size:13px;color:var(--text);background:#fff;border:1px solid #d7d7d7;border-radius:7px;padding:7px 28px 7px 9px}.badge{font-size:12px;font-weight:700;background:var(--soft);padding:6px 9px;border-radius:6px;color:#555}'
+if css_old not in s:
+    raise SystemExit('template CSS anchor not found')
+s = s.replace(css_old, css_new, 1)
+
+top_old = '<div class="top"><div><h1>{{t "app.title"}}</h1><p class="lead">{{tf "app.deviceLead" .DeviceName}}</p></div>{{if .TestMode}}<div class="badge">{{t "app.testMode"}}</div>{{end}}</div>'
+top_new = '<div class="top"><div><h1>{{t "app.title"}}</h1><p class="lead">{{tf "app.deviceLead" .DeviceName}}</p></div><div class="topActions">{{if .TestMode}}<div class="badge">{{t "app.testMode"}}</div>{{end}}<label class="languageControl"><span>Language / 言語</span><select id="languageSelect" aria-label="Language / 言語"><option value="ja" {{if eq (lang) "ja"}}selected{{end}}>日本語</option><option value="en" {{if eq (lang) "en"}}selected{{end}}>English</option></select></label></div></div>'
+if top_old not in s:
+    raise SystemExit('template top anchor not found')
+s = s.replace(top_old, top_new, 1)
+
+js_old = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});"
+js_new = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});\ndocument.getElementById('languageSelect').addEventListener('change',async e=>{const previous={{printf \\\"%q\\\" (lang)}};const body=new URLSearchParams({locale:e.target.value});try{const r=await fetch(admin+'/locale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});if(!r.ok)throw 0;allowClose=true;location.reload()}catch(_){e.target.value=previous;alert('Language setting could not be saved. / 言語設定を保存できませんでした。')}});"
+if js_old not in s:
+    raise SystemExit('template JS anchor not found')
+tpl.write_text(s.replace(js_old, js_new, 1), encoding='utf-8')
