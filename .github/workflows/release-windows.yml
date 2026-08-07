@@ -64,8 +64,11 @@ jobs:
           APP="$ROOT/app"
           mkdir -p "$APP/locales"
 
-          (cd src && GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "../$APP/LocalPhoneTransfer.exe" .)
-          (cd src && GOOS=windows GOARCH=arm64 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "../$APP/LocalPhoneTransfer_ARM64.exe" .)
+          # Keep Go symbol/debug metadata for now. Defender ML flagged the previous
+          # stripped amd64 binary as Trojan:Win32/Wacatac.B!ml, so avoid -s/-w
+          # while retaining the Windows GUI subsystem.
+          (cd src && GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-H=windowsgui' -o "../$APP/LocalPhoneTransfer.exe" .)
+          (cd src && GOOS=windows GOARCH=arm64 go build -trimpath -ldflags='-H=windowsgui' -o "../$APP/LocalPhoneTransfer_ARM64.exe" .)
 
           cp packaging/windows/Start.cmd "$ROOT/Start.cmd"
           cp scripts/windows/Bootstrap.ps1 "$APP/Bootstrap.ps1"
