@@ -80,6 +80,10 @@ func t(key string) string {
 	return v
 }
 
+func tf(key string, args ...any) string {
+	return fmt.Sprintf(t(key), args...)
+}
+
 func currentLang() string {
 	localization.RLock()
 	defer localization.RUnlock()
