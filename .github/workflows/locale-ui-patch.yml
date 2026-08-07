@@ -17,19 +17,20 @@ jobs:
         with:
           token: ${{ github.token }}
       - name: Patch language UI and persistence
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           main = Path('src/main.go')
           s = main.read_text(encoding='utf-8')
-          old = '''\tcase rest == "/api/status" && r.Method == http.MethodGet:\n\t\ta.adminStatus(w)\n\tcase rest == "/upload" && r.Method == http.MethodPost:\n'''
-          new = '''\tcase rest == "/api/status" && r.Method == http.MethodGet:\n\t\ta.adminStatus(w)\n\tcase rest == "/locale" && r.Method == http.MethodPost:\n\t\ta.adminLocale(w, r)\n\tcase rest == "/upload" && r.Method == http.MethodPost:\n'''
+          old = '\tcase rest == "/api/status" && r.Method == http.MethodGet:\n\t\ta.adminStatus(w)\n\tcase rest == "/upload" && r.Method == http.MethodPost:\n'
+          new = '\tcase rest == "/api/status" && r.Method == http.MethodGet:\n\t\ta.adminStatus(w)\n\tcase rest == "/locale" && r.Method == http.MethodPost:\n\t\ta.adminLocale(w, r)\n\tcase rest == "/upload" && r.Method == http.MethodPost:\n'
           if old not in s:
               raise SystemExit('main.go route anchor not found')
           main.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-          Path('src/locale_settings.go').write_text(r'''package main
+          Path('src/locale_settings.go').write_text('''package main
 
 import (
     "encoding/json"
@@ -70,7 +71,7 @@ func (a *App) adminLocale(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "could not encode settings", http.StatusInternalServerError)
         return
     }
-    out = append(out, '\n')
+    out = append(out, '\\n')
     if err := os.WriteFile(configPath, out, 0644); err != nil {
         http.Error(w, "could not save settings", http.StatusInternalServerError)
         return
@@ -99,13 +100,13 @@ func (a *App) adminLocale(w http.ResponseWriter, r *http.Request) {
           s = s.replace(top_old, top_new, 1)
 
           js_old = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});"
-          js_new = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});\ndocument.getElementById('languageSelect').addEventListener('change',async e=>{const previous={{printf \"%q\" (lang)}};const body=new URLSearchParams({locale:e.target.value});try{const r=await fetch(admin+'/locale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});if(!r.ok)throw 0;allowClose=true;location.reload()}catch(_){e.target.value=previous;alert('Language setting could not be saved. / 言語設定を保存できませんでした。')}});"
+          js_new = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});\ndocument.getElementById('languageSelect').addEventListener('change',async e=>{const previous={{printf \\\"%q\\\" (lang)}};const body=new URLSearchParams({locale:e.target.value});try{const r=await fetch(admin+'/locale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});if(!r.ok)throw 0;allowClose=true;location.reload()}catch(_){e.target.value=previous;alert('Language setting could not be saved. / 言語設定を保存できませんでした。')}});"
           if js_old not in s:
               raise SystemExit('template JS anchor not found')
           tpl.write_text(s.replace(js_old, js_new, 1), encoding='utf-8')
 
-          # Remove this one-shot workflow in the same commit.
           Path('.github/workflows/locale-ui-patch.yml').unlink()
+          PY
       - name: Test
         working-directory: src
         run: go test ./...
