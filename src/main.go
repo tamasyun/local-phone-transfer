@@ -710,6 +710,8 @@ func (a *App) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		a.adminPage(w)
 	case rest == "/api/status" && r.Method == http.MethodGet:
 		a.adminStatus(w)
+	case rest == "/locale" && r.Method == http.MethodPost:
+		a.adminLocale(w, r)
 	case rest == "/upload" && r.Method == http.MethodPost:
 		a.uploadFile(w, r, a.sendDir, "admin_share")
 	case rest == "/open" && r.Method == http.MethodPost:
