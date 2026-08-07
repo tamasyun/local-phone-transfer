@@ -1,3 +1,7 @@
+param(
+    [switch]$TestMode
+)
+
 $ErrorActionPreference = 'SilentlyContinue'
 
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -104,5 +108,9 @@ if (!(Test-Path -LiteralPath $startScript)) {
     exit 1
 }
 
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $startScript
+if ($TestMode) {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $startScript -TestMode
+} else {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $startScript
+}
 exit $LASTEXITCODE
