@@ -43,13 +43,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "Get-NetFirewallRule -DisplayName $nameArm -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
   "New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $x64 -RemoteAddress $subnet -Profile Any | Out-Null;" ^
   "if(Test-Path -LiteralPath $arm){New-NetFirewallRule -DisplayName $nameArm -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$cfg.port) -Program $arm -RemoteAddress $subnet -Profile Any | Out-Null};" ^
-  "$shortcutName=[string]$cfg.shortcutName; if([string]::IsNullOrWhiteSpace($shortcutName)){$shortcutName='Offline File Transfer'};" ^
-  "$shortcutName=$shortcutName.Replace([string][char]0x2194,'-'); foreach($c in [IO.Path]::GetInvalidFileNameChars()){$shortcutName=$shortcutName.Replace([string]$c,'-')}; $shortcutName=$shortcutName.Trim().TrimEnd('.'); if([string]::IsNullOrWhiteSpace($shortcutName)){$shortcutName='Offline File Transfer'};" ^
   "$desktop=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonDesktopDirectory);" ^
   "if([string]::IsNullOrWhiteSpace([string]$desktop) -or !(Test-Path -LiteralPath $desktop -PathType Container)){throw 'Public desktop folder could not be resolved.'};" ^
-  "$ws=New-Object -ComObject WScript.Shell; $shortcut=Join-Path $desktop ($shortcutName+'.lnk'); $sc=$ws.CreateShortcut($shortcut);" ^
-  "$sc.TargetPath=Join-Path $dir 'Launch.cmd'; $sc.WorkingDirectory=$dir; $sc.Description='Offline file transfer between PC and smartphone'; $sc.Save();" ^
-  "if(!(Test-Path -LiteralPath $shortcut -PathType Leaf)){throw 'Desktop shortcut was not created.'};" ^
+  "$launcher=Join-Path $desktop 'Offline File Transfer.cmd';" ^
+  "$launcherText='@echo off'+[Environment]::NewLine+'call ""'+(Join-Path $dir 'Launch.cmd')+'""'+[Environment]::NewLine;" ^
+  "Set-Content -LiteralPath $launcher -Value $launcherText -Encoding ASCII;" ^
+  "if(!(Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Desktop launcher was not created.'};" ^
   "Set-Content -LiteralPath (Join-Path $dir '.installed') -Value 'installed' -Encoding ASCII;"
 if %errorlevel% neq 0 goto :setupfail
 
@@ -58,7 +57,7 @@ echo ================================================
 echo Setup completed.
 echo ================================================
 echo.
-echo Start the application from the desktop shortcut.
+echo Start the application with "Offline File Transfer.cmd" on the desktop.
 echo.
 pause
 exit /b 0
