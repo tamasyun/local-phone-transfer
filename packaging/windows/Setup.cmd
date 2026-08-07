@@ -4,6 +4,7 @@ set "PACKAGE_DIR=%~dp0"
 set "SOURCE_APP=%~dp0app"
 set "INSTALL_DIR=%ProgramData%\OfflineFileTransfer"
 set "SCRIPTFILE=%~f0"
+set "CONFIG_BACKUP=%TEMP%\OfflineFileTransfer-config-%RANDOM%-%RANDOM%.json"
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
@@ -18,9 +19,14 @@ if not exist "%SOURCE_APP%\Start-Transfer.ps1" goto :missing
 if not exist "%SOURCE_APP%\transfer-config.json" goto :missing
 if not exist "%SOURCE_APP%\SHA256SUMS.txt" goto :missing
 
+if exist "%INSTALL_DIR%\transfer-config.json" copy /Y "%INSTALL_DIR%\transfer-config.json" "%CONFIG_BACKUP%" >nul
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 robocopy "%SOURCE_APP%" "%INSTALL_DIR%" /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP >nul
 if %errorlevel% geq 8 goto :copyfail
+if exist "%CONFIG_BACKUP%" (
+  copy /Y "%CONFIG_BACKUP%" "%INSTALL_DIR%\transfer-config.json" >nul
+  del /Q "%CONFIG_BACKUP%" >nul 2>&1
+)
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
@@ -29,6 +35,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$x64=Join-Path $dir 'LocalPhoneTransfer.exe'; $arm=Join-Path $dir 'LocalPhoneTransfer_ARM64.exe';" ^
   "if(!(Test-Path -LiteralPath $x64)){throw 'LocalPhoneTransfer.exe not found.'};" ^
   "$subnet=[string]$cfg.transferSubnet; if([string]::IsNullOrWhiteSpace($subnet)){throw 'transferSubnet is missing.'};" ^
+  "$dataDirs=@((Join-Path $dir 'received-files'),(Join-Path $dir 'shared-files'),(Join-Path $dir 'logs'));" ^
+  "foreach($p in $dataDirs){New-Item -ItemType Directory -Path $p -Force | Out-Null; & icacls.exe $p /inheritance:e /grant '*S-1-5-32-545:(OI)(CI)M' /T /C | Out-Null; if($LASTEXITCODE -ne 0){throw ('Failed to set data directory permissions: '+$p)}};" ^
   "$name='Offline File Transfer'; $nameArm='Offline File Transfer ARM64';" ^
   "Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
   "Get-NetFirewallRule -DisplayName $nameArm -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue;" ^
@@ -59,6 +67,7 @@ pause
 exit /b 1
 
 :copyfail
+if exist "%CONFIG_BACKUP%" del /Q "%CONFIG_BACKUP%" >nul 2>&1
 echo.
 echo Failed to install application files.
 pause
@@ -66,6 +75,6 @@ exit /b 1
 
 :setupfail
 echo.
-echo Failed to configure Windows Firewall or the desktop shortcut.
+echo Failed to configure the application.
 pause
 exit /b 1
