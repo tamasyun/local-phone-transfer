@@ -1,26 +1,10 @@
-name: Windows installer
+name: Experimental Windows installer
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-    paths:
-      - 'src/**'
-      - 'scripts/windows/**'
-      - 'config/**'
-      - 'locales/**'
-      - 'packaging/windows/OfflineFileTransfer.iss'
-      - '.github/workflows/installer-windows.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: windows-installer-${{ github.ref }}
-  cancel-in-progress: true
+  contents: read
 
 jobs:
   installer:
@@ -43,11 +27,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          if ('${{ github.ref_type }}' -eq 'tag') {
-            $version = '${{ github.ref_name }}'
-          } else {
-            $version = 'dev-${{ github.sha }}'.Substring(0, 11)
-          }
+          $version = 'dev-${{ github.sha }}'.Substring(0, 11)
           "value=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build application files
@@ -106,35 +86,13 @@ jobs:
           $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $($installer.Name)" | Set-Content -LiteralPath ($installer.FullName + '.sha256') -Encoding ASCII
           "INSTALLER=$($installer.FullName)" >> $env:GITHUB_ENV
-          "INSTALLER_NAME=$($installer.Name)" >> $env:GITHUB_ENV
 
-      - name: Upload installer artifact
+      - name: Upload experimental installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OfflineFileTransfer-Installer-${{ steps.version.outputs.value }}
+          name: OfflineFileTransfer-ExperimentalInstaller-${{ steps.version.outputs.value }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
           path: |
             ${{ env.INSTALLER }}
             ${{ env.INSTALLER }}.sha256
-
-      - name: Add installer to GitHub Release
-        if: github.ref_type == 'tag'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $tag = '${{ github.ref_name }}'
-          $found = $false
-          for ($i = 0; $i -lt 30; $i++) {
-            gh release view $tag *> $null
-            if ($LASTEXITCODE -eq 0) { $found = $true; break }
-            Start-Sleep -Seconds 5
-          }
-          if (-not $found) {
-            gh release create $tag --title "Offline File Transfer $tag" --generate-notes
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-          gh release upload $tag $env:INSTALLER "$($env:INSTALLER).sha256" --clobber
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
