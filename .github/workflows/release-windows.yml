@@ -1,11 +1,9 @@
-name: Release Windows package
+name: Legacy ZIP package artifact
 
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
     paths:
       - 'src/**'
       - 'scripts/windows/**'
@@ -16,15 +14,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package version used for a test artifact (for example v0.1.0-test)'
+        description: 'Artifact version label'
         required: false
         default: 'dev'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-package-${{ github.ref }}
+  group: legacy-zip-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -47,12 +45,10 @@ jobs:
         id: version
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            VERSION="$GITHUB_REF_NAME"
-          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n '${{ inputs.version }}' ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n '${{ inputs.version }}' ]]; then
             VERSION='${{ inputs.version }}'
           else
-            VERSION="v0.1.1"
+            VERSION="dev-${GITHUB_SHA::7}"
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -79,18 +75,6 @@ jobs:
           printf '%s\n' '${{ steps.version.outputs.value }}' > "$APP/VERSION.txt"
           (cd "$APP" && sha256sum LocalPhoneTransfer.exe LocalPhoneTransfer_ARM64.exe > SHA256SUMS.txt)
 
-          test -f "$ROOT/Setup.cmd"
-          test -f "$APP/Launch.cmd"
-          test -f "$APP/Launch-Test.cmd"
-          test -f "$APP/Bootstrap.ps1"
-          test -f "$APP/Start-Transfer.ps1"
-          test -f "$APP/Update.ps1"
-          test -f "$APP/transfer-config.json"
-          test -f "$APP/locales/ja.json"
-          test -f "$APP/locales/en.json"
-          test -f "$APP/locales/ja.console.json"
-          test -f "$APP/locales/en.console.json"
-
       - name: Create ZIP
         shell: bash
         run: |
@@ -101,26 +85,12 @@ jobs:
           sha256sum "$ZIP" > "$ZIP.sha256"
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
-      - name: Upload package artifact
+      - name: Upload internal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OfflineFileTransfer-${{ steps.version.outputs.value }}
+          name: OfflineFileTransfer-LegacyZIP-${{ steps.version.outputs.value }}
           if-no-files-found: error
           retention-days: 14
           path: |
             ${{ env.ZIP }}
             ${{ env.ZIP }}.sha256
-
-      - name: Publish GitHub Release
-        if: github.ref_type == 'tag' || github.ref_name == 'main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.value }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$ZIP" "$ZIP.sha256" --clobber
-          else
-            gh release create "$RELEASE_TAG" "$ZIP" "$ZIP.sha256" --target "$GITHUB_SHA" --title "Offline File Transfer $RELEASE_TAG" --generate-notes
-          fi
