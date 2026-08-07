@@ -1,10 +1,10 @@
 @echo off
 setlocal
 set "APPDIR=%~dp0"
-if not exist "%APPDIR%.installed" (
+if not exist "%APPDIR%Bootstrap.ps1" (
   echo.
-  echo This is an internal application file.
-  echo Install Offline File Transfer using the official installer first.
+  echo Application files are incomplete.
+  echo Download and extract the official release ZIP again.
   echo.
   pause
   exit /b 1
