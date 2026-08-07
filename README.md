@@ -1,164 +1,174 @@
-# Local Phone Transfer
+# Offline File Transfer
 
-Windows 11 共用PCと iPhone / Android の間で、インターネットやクラウドを使わずにファイルを送受信するローカル転送ツールです。
+Windows 11 PC と iPhone / Android の間で、クラウドやインターネットを転送経路として使わずにファイルを送受信するローカル転送ツールです。
 
-PC自身が転送専用Wi-Fiを作成し、スマートフォンはSafari / ChromeなどのWebブラウザだけで利用できます。
+PC が転送専用 Wi-Fi Direct ネットワークを作成し、スマートフォン側は Safari / Chrome などのブラウザだけで利用できます。
+
+## 一般利用者の方へ
+
+**GitHub リポジトリを clone して使うことは想定していません。**
+
+GitHub Releases から `OfflineFileTransfer-<version>.zip` をダウンロードし、展開後に最上位の **`Setup.cmd`** を実行してください。
+
+配布 ZIP は次のような構造です。
+
+```text
+OfflineFileTransfer/
+├─ Setup.cmd              <- 最初に実行するファイル
+└─ app/                   <- 内部ファイル。通常は開く必要なし
+   ├─ Launch.cmd
+   ├─ Launch-Test.cmd
+   ├─ Bootstrap.ps1
+   ├─ Start-Transfer.ps1
+   ├─ LocalPhoneTransfer.exe
+   ├─ LocalPhoneTransfer_ARM64.exe
+   ├─ SHA256SUMS.txt
+   ├─ VERSION.txt
+   ├─ transfer-config.json
+   └─ locales/
+```
+
+`Setup.cmd` は管理者権限を要求し、アプリを次へインストールします。
+
+```text
+C:\ProgramData\OfflineFileTransfer\
+```
+
+その後、デスクトップに次のショートカットを作成します。
+
+```text
+オフラインファイル転送（PC↔スマホ）
+```
+
+普段はこのショートカットだけを使用してください。
+
+内部 EXE は一般利用者が直接起動することを想定しておらず、Release パッケージ上で直接実行した場合は Setup を案内して終了します。
 
 ## 主な仕様
 
 - iPhone / Android ⇄ Windows 11 の双方向ファイル転送
 - スマホ側アプリ不要
-- 転送専用Wi-FiをPC自身が作成
-- Wi-Fiパスワードは起動ごとにランダム生成
-- 転送URLと管理URLも起動ごとにランダム生成
-- 管理画面は `127.0.0.1` からのみ利用可能
-- 通常モードのHTTPサーバーは `127.0.0.1` と転送専用Wi-FiのIPv4アドレスだけで待ち受け
-- Windows Firewallも標準では `192.168.137.0/24` のみに限定
-- 最後の実操作から180分で自動終了
-- 起動から480分（8時間）で必ず終了
-- 定期的な画面更新は実操作として扱わない
-- 残り時間は常時表示せず、自動終了の10分前からだけ注意を表示
-- 起動時に未完了の `.upload-*` 一時ファイルを清掃
-- 同時アップロード数を制限
-- 保存前に空き容量を確認
-- 1ファイルあたりの最大サイズを制限
-- セッション全体の転送量上限は設けない
-- HTTPセキュリティヘッダーを設定
-- VMテストモードは `127.0.0.1` のみに限定
-- note / Notionのような白基調・余白中心のシンプルUI
+- PC 自身が Wi-Fi Direct の転送専用ネットワークを作成
+- Wi-Fi パスワードは起動ごとに暗号学的乱数で生成
+- 転送 URL / 管理 URL もセッションごとにランダム生成
+- 管理画面は localhost のみ
+- HTTP サーバーは localhost と転送専用 Wi-Fi 側 IPv4 だけで待ち受け
+- Windows Firewall は標準 `192.168.137.0/24` のみに限定
+- 最後の実操作から 180 分で自動終了
+- 起動から 480 分（8時間）で必ず終了
+- 状態ポーリングは実操作として扱わない
+- 自動終了の10分前だけ注意表示
+- 1ファイルあたり最大 2048 MB（設定可能）
+- セッション全体の転送量上限なし
+- 同時アップロード数制限
+- 保存前の空き容量チェック
+- `.upload-*` 一時ファイルを起動時に清掃
+- CSP / Permissions-Policy / Referrer-Policy / X-Frame-Options 等を設定
+- 日本語 / 英語のローカライズ基盤
+- VM テストモードは `127.0.0.1` のみに限定
 
-## 初期セットアップ
+## 終了方法
 
-```powershell
-git clone https://github.com/tamasyun/local-phone-transfer.git
-cd local-phone-transfer
+PC 側の画面下に表示される **「ファイル転送を終了」** を使用します。
+
+ウィンドウを閉じるだけではなく、終了ボタンから正常終了することを前提にしています。ブラウザを閉じようとした場合は `beforeunload` による確認も行います。
+
+正常終了しなかった場合でも、アイドルタイムアウトと絶対上限が最終的な安全網になります。
+
+## 多言語対応
+
+標準は日本語です。
+
+`config/default.json` / 配布物の `transfer-config.json` にある
+
+```json
+"locale": "ja"
 ```
 
-最初に1回だけ `初期セットアップ.cmd` を実行してください。
+を
 
-セットアップでは次を行います。
+```json
+"locale": "en"
+```
 
-- 転送アプリのEXEだけを対象にWindows Firewall規則を作成
-- TCPポートを `transfer-config.json` の `port` に限定
-- 接続元を `transferSubnet`（標準 `192.168.137.0/24`）に限定
-- デスクトップへ `Local Phone Transfer` ショートカットを作成
+へ変更すると、PC ブラウザ画面、スマホ画面、起動時メッセージが英語になります。
 
-Firewall規則の仕様を更新した場合は、`git pull` 後に `初期セットアップ.cmd` をもう一度実行してください。
+翻訳ファイルは `locales/` にあります。
 
-## 普段の使い方
+```text
+locales/
+├─ ja.json
+├─ en.json
+├─ ja.console.json
+└─ en.console.json
+```
 
-デスクトップの `Local Phone Transfer` を起動します。
+## セキュリティ境界
 
-1. 起動時にアプリ本体のSHA-256を `SHA256SUMS.txt` と照合
-2. GitHubへ接続できる場合だけ `main` の更新を確認
-3. Gitの接続先が公式リポジトリと一致することを確認
-4. Fast-forwardできる場合だけ更新
-5. 更新後に再度EXEのSHA-256を検証
-6. 検証に失敗した場合は更新前のコミットへ戻す
-7. 今回限りのWi-Fiパスワードを生成
-8. 転送専用Wi-Fiを開始
-9. PC操作画面を開く
+通常モードは HTTP ですが、通信経路を起動ごとのランダムパスワード付き転送専用 Wi-Fi に限定します。
 
-インターネットがない場合は更新確認だけをスキップし、ローカルファイル転送は通常どおり利用できます。
+さらに以下を行います。
 
-> `SHA256SUMS.txt` は破損や意図しないバイナリ差し替えの検出には有効ですが、GitHubアカウントや `main` 自体が侵害された場合まで保証する独立した署名ではありません。そこまで保証するにはAuthenticode等のコード署名が必要です。
-
-## アイドルタイムアウトと絶対上限
-
-標準設定は次のとおりです。
-
-- `idleStopMinutes: 180`
-- `absoluteStopMinutes: 480`
-
-最後の実操作から3時間操作がない場合に自動終了します。それとは別に、セッションは起動から8時間で必ず終了します。
-
-タイマーを更新する「実操作」の例：
-
-- スマホで転送ページを開く
-- スマホ → PC のアップロード
-- PC → スマホ のダウンロード
-- PC側で共有ファイルを追加
-- 共有/受信フォルダーを開く
-- 共有ファイルや受信ファイルを削除
-
-タイマーを更新しないもの：
-
-- PC画面の状態確認ポーリング
-- スマホ側のファイル一覧自動更新
-- 画面を開いたまま放置しているだけの状態
-
-アップロード・ダウンロード中はデータが継続して流れている限り一定間隔で実操作として更新されます。ただし絶対上限の8時間は延長されません。
-
-画面には残り時間を常時表示せず、アイドル終了または絶対上限まで10分以下になった場合だけ警告します。
-
-## 異常終了・シャットダウン
-
-PCのシャットダウンや強制終了で転送が中断した場合、転送用Wi-FiとHTTPサーバーは停止します。
-
-アップロード中のファイルは `.upload-*` の一時ファイルとして保存され、正常完了した時だけ正式なファイル名へ変更されます。次回起動時に残っている `.upload-*` は自動削除されます。
-
-完了済みの受信ファイルは残ります。PC→スマホ用の一時共有ファイルは次回起動時にクリアされます。Wi-Fiパスワード、転送URL、セッショントークンは次回起動時にすべて新しく生成されます。
-
-## セキュリティ上の境界
-
-通常モードではHTTPを使用しますが、通信経路を起動ごとのランダムパスワード付き転送専用Wi-Fiに限定します。
-
-さらに、
-
-- HTTPサーバーはlocalhostと転送専用Wi-FiのIPだけで待ち受け
-- Windows Firewallも転送専用サブネットだけを許可
-- スマホ用URLは転送専用サブネット以外から拒否
-- 正しいセッショントークンで最初に接続したスマホIPへセッションを固定
-- 管理APIとQR生成APIはループバック接続のみ
-- URLトークンは暗号学的乱数で生成
-- ファイル名のパストラバーサル対策
-- 1ファイルあたりのアップロードサイズ制限
+- HTTP サーバーを通常 LAN の NIC では待ち受けない
+- Firewall も転送専用サブネットだけ許可
+- スマホ用 URL は転送専用サブネット以外から拒否
+- 正しいセッショントークンで最初に接続したスマホ IP に固定
+- 管理 API / QR API はループバックのみ
+- URL トークンは暗号学的乱数
+- ファイル名サニタイズ / パストラバーサル対策
+- 一時ファイル保存後、完了時のみ正式ファイル名へ rename
 - 同時アップロード数制限
 - ディスク空き容量チェック
-- アップロードは一時ファイルへ保存後、完了時のみ正式ファイルへ変更
-- CSP / Referrer-Policy / Permissions-Policy / X-Frame-Options等を設定
+- SHA-256 による配布 EXE の整合性確認
 
-を行います。
+SHA-256 は破損や不整合の検出用です。GitHub アカウントや Release 自体の侵害まで独立して保証するものではありません。将来的な公開版では Authenticode コード署名を追加する予定です。
 
-ログは `logs/session-YYYYMMDD-HHMMSS.log` に保存され、Wi-Fiパスワード、セッショントークン、ファイル名は記録しません。14日より古いセッションログは起動時に削除します。
+## VM テストモード
 
-## VMテストモード
+インストール後の内部ディレクトリに `Launch-Test.cmd` があります。
 
-VMwareなどWi-Fi Directを利用できない環境では `LocalPhoneTransfer-Test.cmd` を使用できます。
+VM テストモードでは：
 
-テストモードでは：
+- Wi-Fi Direct を開始しない
+- Firewall を変更しない
+- HTTP サーバーは `127.0.0.1` のみ
+- ホスト PC / 実スマートフォン / 同一 LAN から接続不可
+- VM 内ブラウザだけで PC 側とスマホ側 UI を検証可能
 
-- Wi-Fi Directを起動しない
-- Windows Firewallを変更しない
-- HTTPサーバーは `127.0.0.1` のみ
-- ホストPC、スマートフォン、同一LANの別端末から接続不可
-- PC画面とスマホ画面をVM内ブラウザで確認可能
+## 開発者向け構成
 
-## 設定
+GitHub リポジトリは配布物そのものではなく、開発ソースとして整理しています。
 
-`transfer-config.json`
+```text
+.
+├─ src/                         # Go アプリケーション
+├─ scripts/windows/             # Windows ランタイム / ランチャー原本
+├─ packaging/windows/           # Release 用 Setup
+├─ config/                      # 既定設定
+├─ locales/                     # UI / console 翻訳
+├─ .github/workflows/           # CI / Release パッケージ生成
+└─ README.md
+```
 
-| 項目 | 標準値 | 意味 |
-|---|---:|---|
-| `port` | `8765` | HTTPサーバーポート |
-| `maxUploadMB` | `2048` | 1ファイルあたりの最大サイズ |
-| `minFreeSpaceMB` | `1024` | 転送後も残す最低空き容量 |
-| `maxConcurrentUploads` | `2` | 同時アップロード数 |
-| `idleStopMinutes` | `180` | 最後の実操作から自動終了までの時間 |
-| `absoluteStopMinutes` | `480` | 起動からの絶対上限時間 |
-| `preferredIpPrefix` | `192.168.137.` | 転送専用Wi-Fiの優先IPv4プレフィックス |
-| `transferSubnet` | `192.168.137.0/24` | 転送専用サブネット |
-| `wifiSsid` | `PC-FileTransfer` | 転送専用Wi-Fi名 |
-| `wifiPasswordLength` | `16` | 起動時に生成するWi-Fiパスワード長 |
-| `clearSendOnExit` | `true` | PC→スマホ共有ファイルをセッション終了時に消すか |
+### CI
 
-セッション全体の転送量上限は設けていません。
+`Windows CI` は Go テストと Windows x64 / ARM64 ビルドを行い、バイナリは7日間の Actions artifact として保存します。バイナリを `main` に自動コミットしません。
 
-## ビルド
+### Release
 
-Goソースは `src/` にあります。`src/` の変更時にGitHub ActionsがWindows x64 / ARM64のEXEをビルドし、`SHA256SUMS.txt` を更新します。
+`v*` タグを push すると `Release Windows package` workflow が以下を実行します。
 
-## 対応OS
+1. `go test ./...`
+2. Windows x64 / ARM64 EXE を再ビルド
+3. ランタイムスクリプト・設定・翻訳を収集
+4. `SHA256SUMS.txt` を生成
+5. `Setup.cmd + app/` の配布ツリーを構築
+6. `OfflineFileTransfer-<version>.zip` と ZIP の SHA-256 を生成
+7. GitHub Release に公開
+
+手作業でバイナリを組み合わせて Release を作る運用は想定していません。
+
+## 対応 OS
 
 - Windows 11 x64
 - Windows 11 ARM64
