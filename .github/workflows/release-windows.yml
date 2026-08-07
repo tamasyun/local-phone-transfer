@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package version used for a test artifact (for example v0.2.1-test)'
+        description: 'Package version used for a test artifact (for example v0.4.0-test)'
         required: false
         default: 'dev'
 
@@ -67,28 +67,26 @@ jobs:
           (cd src && GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "../$APP/LocalPhoneTransfer.exe" .)
           (cd src && GOOS=windows GOARCH=arm64 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "../$APP/LocalPhoneTransfer_ARM64.exe" .)
 
+          cp packaging/windows/Start.cmd "$ROOT/Start.cmd"
           cp scripts/windows/Bootstrap.ps1 "$APP/Bootstrap.ps1"
+          cp scripts/windows/Configure-Firewall.ps1 "$APP/Configure-Firewall.ps1"
           cp scripts/windows/Start-Transfer.ps1 "$APP/Start-Transfer.ps1"
           cp scripts/windows/Update.ps1 "$APP/Update.ps1"
-          cp scripts/windows/Uninstall.ps1 "$APP/Uninstall.ps1"
           cp scripts/windows/Launch.cmd "$APP/Launch.cmd"
           cp scripts/windows/Launch-Test.cmd "$APP/Launch-Test.cmd"
-          cp scripts/windows/Uninstall.cmd "$APP/Uninstall.cmd"
           cp config/default.json "$APP/transfer-config.json"
           cp locales/*.json "$APP/locales/"
-          cp packaging/windows/Setup.cmd "$ROOT/Setup.cmd"
 
           printf '%s\n' '${{ steps.version.outputs.value }}' > "$APP/VERSION.txt"
           (cd "$APP" && sha256sum LocalPhoneTransfer.exe LocalPhoneTransfer_ARM64.exe > SHA256SUMS.txt)
 
-          test -f "$ROOT/Setup.cmd"
+          test -f "$ROOT/Start.cmd"
           test -f "$APP/Launch.cmd"
           test -f "$APP/Launch-Test.cmd"
           test -f "$APP/Bootstrap.ps1"
+          test -f "$APP/Configure-Firewall.ps1"
           test -f "$APP/Start-Transfer.ps1"
           test -f "$APP/Update.ps1"
-          test -f "$APP/Uninstall.cmd"
-          test -f "$APP/Uninstall.ps1"
           test -f "$APP/transfer-config.json"
           test -f "$APP/locales/ja.json"
           test -f "$APP/locales/en.json"
