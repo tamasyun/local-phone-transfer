@@ -4,7 +4,7 @@ set "APPDIR=%~dp0"
 if not exist "%APPDIR%.installed" (
   echo.
   echo This is an internal application file.
-  echo Run Setup.cmd from the downloaded package first.
+  echo Install Offline File Transfer using the official installer first.
   echo.
   pause
   exit /b 1
