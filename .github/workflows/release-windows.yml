@@ -2,8 +2,17 @@ name: Release Windows package
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+    paths:
+      - 'src/**'
+      - 'scripts/windows/**'
+      - 'config/**'
+      - 'locales/**'
+      - 'packaging/windows/**'
+      - '.github/workflows/release-windows.yml'
   workflow_dispatch:
     inputs:
       version:
@@ -13,6 +22,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-package-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   package:
@@ -35,10 +48,13 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            echo "value=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n '${{ inputs.version }}' ]]; then
+            VERSION='${{ inputs.version }}'
           else
-            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            VERSION="dev-${GITHUB_SHA::7}"
           fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build package tree
         shell: bash
