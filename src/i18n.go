@@ -18,6 +18,26 @@ var localization = struct {
 	text map[string]string
 }{lang: "ja", text: map[string]string{}}
 
+type localeConfig struct {
+	Locale string `json:"locale"`
+}
+
+func init() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	baseDir := filepath.Dir(exe)
+	requested := "ja"
+	if b, err := os.ReadFile(filepath.Join(baseDir, "transfer-config.json")); err == nil {
+		var cfg localeConfig
+		if json.Unmarshal(b, &cfg) == nil && strings.TrimSpace(cfg.Locale) != "" {
+			requested = cfg.Locale
+		}
+	}
+	_ = loadLocale(baseDir, requested)
+}
+
 func loadLocale(baseDir, requested string) error {
 	lang := strings.TrimSpace(requested)
 	if lang == "" {
