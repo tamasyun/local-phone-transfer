@@ -29,10 +29,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$launcher=Join-Path $dir 'LocalPhoneTransfer.cmd';" ^
   "if(!(Test-Path -LiteralPath $launcher)){throw 'LocalPhoneTransfer.cmd not found.'};" ^
   "$desktop=[Environment]::GetFolderPath('Desktop');" ^
-  "$shortcut=Join-Path $desktop 'Local Phone Transfer.lnk';" ^
+  "$shortcutName=[string]$cfg.shortcutName; if([string]::IsNullOrWhiteSpace($shortcutName)){$shortcutName='Offline File Transfer'};" ^
+  "$shortcut=Join-Path $desktop ($shortcutName + '.lnk');" ^
+  "$oldShortcut=Join-Path $desktop 'Local Phone Transfer.lnk'; if(Test-Path -LiteralPath $oldShortcut){Remove-Item -LiteralPath $oldShortcut -Force};" ^
   "$ws=New-Object -ComObject WScript.Shell;" ^
   "$sc=$ws.CreateShortcut($shortcut);" ^
-  "$sc.TargetPath=$launcher; $sc.WorkingDirectory=$dir; $sc.Description='Local file transfer for iPhone and Android'; $sc.Save();" ^
+  "$sc.TargetPath=$launcher; $sc.WorkingDirectory=$dir; $sc.Description='Offline file transfer between PC and smartphone'; $sc.Save();" ^
   "Write-Host ''; Write-Host 'Firewall rules and desktop shortcut created.' -ForegroundColor Green;"
 
 if %errorlevel% neq 0 (
@@ -47,6 +49,6 @@ echo ================================================
 echo Setup completed.
 echo ================================================
 echo.
-echo Start from the "Local Phone Transfer" desktop shortcut.
+echo Use the desktop shortcut to start file transfer.
 echo.
 pause
