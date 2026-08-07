@@ -49,8 +49,6 @@ jobs:
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             VERSION="$GITHUB_REF_NAME"
-          elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
-            VERSION="v0.3.4"
           elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n '${{ inputs.version }}' ]]; then
             VERSION='${{ inputs.version }}'
           else
@@ -114,15 +112,14 @@ jobs:
             ${{ env.ZIP }}.sha256
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          VERSION='${{ steps.version.outputs.value }}'
-          if gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release upload "$VERSION" "$ZIP" "$ZIP.sha256" --clobber
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" --clobber
           else
-            gh release create "$VERSION" "$ZIP" "$ZIP.sha256" --target "$GITHUB_SHA" --title "Offline File Transfer $VERSION" --generate-notes
+            gh release create "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" --title "Offline File Transfer $GITHUB_REF_NAME" --generate-notes
           fi
