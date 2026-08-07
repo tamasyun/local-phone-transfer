@@ -31,7 +31,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$desktop=[Environment]::GetFolderPath('Desktop');" ^
   "$shortcutName=[string]$cfg.shortcutName; if([string]::IsNullOrWhiteSpace($shortcutName)){$shortcutName='Offline File Transfer'};" ^
   "$shortcut=Join-Path $desktop ($shortcutName + '.lnk');" ^
-  "$oldShortcut=Join-Path $desktop 'Local Phone Transfer.lnk'; if(Test-Path -LiteralPath $oldShortcut){Remove-Item -LiteralPath $oldShortcut -Force};" ^
   "$ws=New-Object -ComObject WScript.Shell;" ^
   "$sc=$ws.CreateShortcut($shortcut);" ^
   "$sc.TargetPath=$launcher; $sc.WorkingDirectory=$dir; $sc.Description='Offline file transfer between PC and smartphone'; $sc.Save();" ^
