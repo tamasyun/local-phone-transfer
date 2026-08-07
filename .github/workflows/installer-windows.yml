@@ -1,0 +1,140 @@
+name: Windows installer
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - 'src/**'
+      - 'scripts/windows/**'
+      - 'config/**'
+      - 'locales/**'
+      - 'packaging/windows/OfflineFileTransfer.iss'
+      - '.github/workflows/installer-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+
+      - name: Test
+        working-directory: src
+        run: go test ./...
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $version = '${{ github.ref_name }}'
+          } else {
+            $version = 'dev-${{ github.sha }}'.Substring(0, 11)
+          }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build application files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = Join-Path $env:GITHUB_WORKSPACE 'packaging\windows\build\app'
+          New-Item -ItemType Directory -Path (Join-Path $app 'locales') -Force | Out-Null
+
+          Push-Location src
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          go build -trimpath -ldflags '-s -w -H=windowsgui' -o (Join-Path $app 'LocalPhoneTransfer.exe') .
+          $env:GOARCH = 'arm64'
+          go build -trimpath -ldflags '-s -w -H=windowsgui' -o (Join-Path $app 'LocalPhoneTransfer_ARM64.exe') .
+          Pop-Location
+
+          Copy-Item scripts\windows\Bootstrap.ps1 $app
+          Copy-Item scripts\windows\Start-Transfer.ps1 $app
+          Copy-Item scripts\windows\Update.ps1 $app
+          Copy-Item scripts\windows\Install-Configure.ps1 $app
+          Copy-Item scripts\windows\Launch.cmd $app
+          Copy-Item config\default.json (Join-Path $app 'transfer-config.json')
+          Copy-Item locales\*.json (Join-Path $app 'locales')
+
+          Set-Content -LiteralPath (Join-Path $app 'VERSION.txt') -Value '${{ steps.version.outputs.value }}' -Encoding ASCII
+
+          $x64 = (Get-FileHash -LiteralPath (Join-Path $app 'LocalPhoneTransfer.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $arm = (Get-FileHash -LiteralPath (Join-Path $app 'LocalPhoneTransfer_ARM64.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          @(
+            "$x64  LocalPhoneTransfer.exe",
+            "$arm  LocalPhoneTransfer_ARM64.exe"
+          ) | Set-Content -LiteralPath (Join-Path $app 'SHA256SUMS.txt') -Encoding ASCII
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        working-directory: packaging/windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = @(
+            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+            'C:\Program Files\Inno Setup 6\ISCC.exe',
+            'C:\Program Files\Inno Setup 7\ISCC.exe'
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $iscc) { throw 'ISCC.exe was not found.' }
+
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.value }}" 'OfflineFileTransfer.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $installer = Get-ChildItem -LiteralPath output -Filter '*-Setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer was not generated.' }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content -LiteralPath ($installer.FullName + '.sha256') -Encoding ASCII
+          "INSTALLER=$($installer.FullName)" >> $env:GITHUB_ENV
+          "INSTALLER_NAME=$($installer.Name)" >> $env:GITHUB_ENV
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OfflineFileTransfer-Installer-${{ steps.version.outputs.value }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.INSTALLER }}
+            ${{ env.INSTALLER }}.sha256
+
+      - name: Add installer to GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = '${{ github.ref_name }}'
+          $found = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            gh release view $tag *> $null
+            if ($LASTEXITCODE -eq 0) { $found = $true; break }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $found) {
+            gh release create $tag --title "Offline File Transfer $tag" --generate-notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload $tag $env:INSTALLER "$($env:INSTALLER).sha256" --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
