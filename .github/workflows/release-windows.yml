@@ -69,6 +69,7 @@ jobs:
 
           cp scripts/windows/Bootstrap.ps1 "$APP/Bootstrap.ps1"
           cp scripts/windows/Start-Transfer.ps1 "$APP/Start-Transfer.ps1"
+          cp scripts/windows/Update.ps1 "$APP/Update.ps1"
           cp scripts/windows/Launch.cmd "$APP/Launch.cmd"
           cp scripts/windows/Launch-Test.cmd "$APP/Launch-Test.cmd"
           cp config/default.json "$APP/transfer-config.json"
@@ -83,6 +84,7 @@ jobs:
           test -f "$APP/Launch-Test.cmd"
           test -f "$APP/Bootstrap.ps1"
           test -f "$APP/Start-Transfer.ps1"
+          test -f "$APP/Update.ps1"
           test -f "$APP/transfer-config.json"
           test -f "$APP/locales/ja.json"
           test -f "$APP/locales/en.json"
