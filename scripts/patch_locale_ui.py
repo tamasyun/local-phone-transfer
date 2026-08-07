@@ -18,9 +18,6 @@ import (
     "strings"
 )
 
-// adminLocale updates only the locale field in transfer-config.json.
-// The admin route already restricts this endpoint to loopback requests with
-// the per-session admin token.
 func (a *App) adminLocale(w http.ResponseWriter, r *http.Request) {
     if err := r.ParseForm(); err != nil {
         http.Error(w, "invalid request", http.StatusBadRequest)
@@ -72,13 +69,13 @@ if css_old not in s:
 s = s.replace(css_old, css_new, 1)
 
 top_old = '<div class="top"><div><h1>{{t "app.title"}}</h1><p class="lead">{{tf "app.deviceLead" .DeviceName}}</p></div>{{if .TestMode}}<div class="badge">{{t "app.testMode"}}</div>{{end}}</div>'
-top_new = '<div class="top"><div><h1>{{t "app.title"}}</h1><p class="lead">{{tf "app.deviceLead" .DeviceName}}</p></div><div class="topActions">{{if .TestMode}}<div class="badge">{{t "app.testMode"}}</div>{{end}}<label class="languageControl"><span>Language / 言語</span><select id="languageSelect" aria-label="Language / 言語"><option value="ja" {{if eq (lang) "ja"}}selected{{end}}>日本語</option><option value="en" {{if eq (lang) "en"}}selected{{end}}>English</option></select></label></div></div>'
+top_new = '<div class="top"><div><h1>{{t "app.title"}}</h1><p class="lead">{{tf "app.deviceLead" .DeviceName}}</p></div><div class="topActions">{{if .TestMode}}<div class="badge">{{t "app.testMode"}}</div>{{end}}<label class="languageControl"><span>Language / 言語</span><select id="languageSelect" data-current="{{lang}}" aria-label="Language / 言語"><option value="ja" {{if eq (lang) "ja"}}selected{{end}}>日本語</option><option value="en" {{if eq (lang) "en"}}selected{{end}}>English</option></select></label></div></div>'
 if top_old not in s:
     raise SystemExit('template top anchor not found')
 s = s.replace(top_old, top_new, 1)
 
 js_old = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});"
-js_new = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});\ndocument.getElementById('languageSelect').addEventListener('change',async e=>{const previous={{printf \\\"%q\\\" (lang)}};const body=new URLSearchParams({locale:e.target.value});try{const r=await fetch(admin+'/locale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});if(!r.ok)throw 0;allowClose=true;location.reload()}catch(_){e.target.value=previous;alert('Language setting could not be saved. / 言語設定を保存できませんでした。')}});"
+js_new = "const admin='/admin/{{.AdminToken}}';let allowClose=false;window.addEventListener('beforeunload',e=>{if(!allowClose){e.preventDefault();e.returnValue=''}});\ndocument.getElementById('languageSelect').addEventListener('change',async e=>{const previous=e.target.dataset.current;const body=new URLSearchParams({locale:e.target.value});try{const r=await fetch(admin+'/locale',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});if(!r.ok)throw 0;allowClose=true;location.reload()}catch(_){e.target.value=previous;alert('Language setting could not be saved. / 言語設定を保存できませんでした。')}});"
 if js_old not in s:
     raise SystemExit('template JS anchor not found')
 tpl.write_text(s.replace(js_old, js_new, 1), encoding='utf-8')
