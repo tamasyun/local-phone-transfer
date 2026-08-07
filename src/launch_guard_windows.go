@@ -28,6 +28,6 @@ func init() {
 		}
 	}
 
-	fatalDialog("Offline File Transfer", "This is an internal application file.\n\nInstall Offline File Transfer first, then start it from the desktop shortcut.")
+	fatalDialog("Offline File Transfer", "This is an internal application file.\n\nInstall Offline File Transfer first, then start it with Offline File Transfer.cmd.")
 	os.Exit(1)
 }
