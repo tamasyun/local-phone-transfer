@@ -16,6 +16,7 @@ if %errorlevel% neq 0 (
 if not exist "%SOURCE_APP%\Launch.cmd" goto :missing
 if not exist "%SOURCE_APP%\Bootstrap.ps1" goto :missing
 if not exist "%SOURCE_APP%\Start-Transfer.ps1" goto :missing
+if not exist "%SOURCE_APP%\Update.ps1" goto :missing
 if not exist "%SOURCE_APP%\transfer-config.json" goto :missing
 if not exist "%SOURCE_APP%\SHA256SUMS.txt" goto :missing
 
