@@ -5,9 +5,25 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$MessagesPath = Join-Path $AppDir 'messages.json'
+$ConfigPath = Join-Path $AppDir 'transfer-config.json'
 $ChecksumsPath = Join-Path $AppDir 'SHA256SUMS.txt'
 $ExpectedOrigin = 'https://github.com/tamasyun/local-phone-transfer.git'
+
+function Resolve-MessagesPath {
+    $fallback = Join-Path $AppDir 'messages.json'
+    if (!(Test-Path -LiteralPath $ConfigPath)) { return $fallback }
+    try {
+        $cfg = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $locale = [string]$cfg.locale
+        if ([string]::IsNullOrWhiteSpace($locale)) { $locale = 'ja' }
+        if ($locale -notmatch '^[A-Za-z0-9_-]+$') { return $fallback }
+        $candidate = Join-Path $AppDir ('locales\' + $locale + '.console.json')
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    } catch {}
+    return $fallback
+}
+
+$MessagesPath = Resolve-MessagesPath
 
 function Load-Messages {
     if (Test-Path -LiteralPath $MessagesPath) {
