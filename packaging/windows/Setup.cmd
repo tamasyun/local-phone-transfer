@@ -46,7 +46,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$desktop=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonDesktopDirectory);" ^
   "if([string]::IsNullOrWhiteSpace([string]$desktop) -or !(Test-Path -LiteralPath $desktop -PathType Container)){throw 'Public desktop folder could not be resolved.'};" ^
   "$launcher=Join-Path $desktop 'Offline File Transfer.cmd';" ^
-  "$launcherText='@echo off'+[Environment]::NewLine+'call ""'+(Join-Path $dir 'Launch.cmd')+'""'+[Environment]::NewLine;" ^
+  "$launcherText='@echo off'+[Environment]::NewLine+'call "'+(Join-Path $dir 'Launch.cmd')+'"'+[Environment]::NewLine;" ^
   "Set-Content -LiteralPath $launcher -Value $launcherText -Encoding ASCII;" ^
   "if(!(Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Desktop launcher was not created.'};" ^
   "Set-Content -LiteralPath (Join-Path $dir '.installed') -Value 'installed' -Encoding ASCII;"
