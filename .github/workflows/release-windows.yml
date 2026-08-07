@@ -52,7 +52,7 @@ jobs:
           elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n '${{ inputs.version }}' ]]; then
             VERSION='${{ inputs.version }}'
           else
-            VERSION="dev-${GITHUB_SHA::7}"
+            VERSION="v0.4.1"
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -64,9 +64,8 @@ jobs:
           APP="$ROOT/app"
           mkdir -p "$APP/locales"
 
-          # Keep Go symbol/debug metadata for now. Defender ML flagged the previous
-          # stripped amd64 binary as Trojan:Win32/Wacatac.B!ml, so avoid -s/-w
-          # while retaining the Windows GUI subsystem.
+          # Keep Go symbol/debug metadata. Defender ML flagged the stripped amd64
+          # binary as Trojan:Win32/Wacatac.B!ml, while the non-stripped build passed.
           (cd src && GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-H=windowsgui' -o "../$APP/LocalPhoneTransfer.exe" .)
           (cd src && GOOS=windows GOARCH=arm64 go build -trimpath -ldflags='-H=windowsgui' -o "../$APP/LocalPhoneTransfer_ARM64.exe" .)
 
@@ -117,14 +116,15 @@ jobs:
             ${{ env.ZIP }}.sha256
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" --clobber
+          VERSION='${{ steps.version.outputs.value }}'
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" "$ZIP" "$ZIP.sha256" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" --title "Offline File Transfer $GITHUB_REF_NAME" --generate-notes
+            gh release create "$VERSION" "$ZIP" "$ZIP.sha256" --target "$GITHUB_SHA" --title "Offline File Transfer $VERSION" --generate-notes
           fi
