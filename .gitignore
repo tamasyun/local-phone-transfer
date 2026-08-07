@@ -1,0 +1,18 @@
+# Local build output
+/LocalPhoneTransfer.exe
+/LocalPhoneTransfer_ARM64.exe
+/SHA256SUMS.txt
+/dist/
+
+# Runtime data
+/received-files/
+/shared-files/
+/logs/
+*.upload-*
+
+# Local configuration overrides
+/config/local.json
+
+# OS/editor files
+.DS_Store
+Thumbs.db
