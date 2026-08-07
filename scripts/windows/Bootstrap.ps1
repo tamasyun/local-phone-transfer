@@ -9,8 +9,9 @@ $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigPath = Join-Path $AppDir 'transfer-config.json'
 $ChecksumsPath = Join-Path $AppDir 'SHA256SUMS.txt'
 $VersionPath = Join-Path $AppDir 'VERSION.txt'
-$InstalledMarker = Join-Path $AppDir '.installed'
 $UpdaterPath = Join-Path $AppDir 'Update.ps1'
+$FirewallHelperPath = Join-Path $AppDir 'Configure-Firewall.ps1'
+$FirewallMarkerPath = Join-Path $AppDir '.firewall-configured'
 $LatestReleaseApi = 'https://api.github.com/repos/tamasyun/local-phone-transfer/releases/latest'
 
 function Resolve-MessagesPath {
@@ -74,14 +75,45 @@ function Test-GitHubOnline {
     return $false
 }
 
+function Ensure-FirewallConfigured {
+    if ($TestMode) { return $true }
+    if (!(Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return $false }
+    if (!(Test-Path -LiteralPath $FirewallHelperPath -PathType Leaf)) { return $false }
+
+    try {
+        $cfg = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $subnet = [string]$cfg.transferSubnet
+        $port = [int]$cfg.port
+        if ([string]::IsNullOrWhiteSpace($subnet) -or $port -lt 1 -or $port -gt 65535) { return $false }
+        $desired = ($AppDir + '|' + $port + '|' + $subnet)
+        $marker = ''
+        if (Test-Path -LiteralPath $FirewallMarkerPath -PathType Leaf) {
+            $marker = (Get-Content -LiteralPath $FirewallMarkerPath -Raw -Encoding UTF8).Trim()
+        }
+        $x64Rule = Get-NetFirewallRule -DisplayName 'Offline File Transfer' -ErrorAction SilentlyContinue
+        $armNeeded = Test-Path -LiteralPath (Join-Path $AppDir 'LocalPhoneTransfer_ARM64.exe') -PathType Leaf
+        $armRule = if ($armNeeded) { Get-NetFirewallRule -DisplayName 'Offline File Transfer ARM64' -ErrorAction SilentlyContinue } else { $true }
+        if ($marker -eq $desired -and $null -ne $x64Rule -and $null -ne $armRule) { return $true }
+
+        Write-Host (Text 'configuringFirewall' 'Configuring Windows Firewall...') -ForegroundColor Yellow
+        $argLine = '-NoProfile -ExecutionPolicy Bypass -File "' + $FirewallHelperPath + '"'
+        $p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $argLine -PassThru -Wait
+        if ($null -eq $p -or $p.ExitCode -ne 0) { return $false }
+
+        if (!(Test-Path -LiteralPath $FirewallMarkerPath -PathType Leaf)) { return $false }
+        $marker = (Get-Content -LiteralPath $FirewallMarkerPath -Raw -Encoding UTF8).Trim()
+        return ($marker -eq $desired)
+    } catch {
+        return $false
+    }
+}
+
 function Invoke-ReleaseUpdateIfNeeded {
     if ($SkipUpdate) { return $false }
-    if (!(Test-Path -LiteralPath $InstalledMarker)) { return $false }
     if (!(Test-Path -LiteralPath $VersionPath)) { return $false }
     if (!(Test-Path -LiteralPath $UpdaterPath)) { return $false }
 
     $current = (Get-Content -LiteralPath $VersionPath -Raw -Encoding UTF8).Trim()
-    # Development artifacts use dev-* and never auto-install a public release.
     if ($current -notmatch '^v[0-9A-Za-z][0-9A-Za-z._-]*$') { return $false }
 
     Write-Host (Text 'checkingUpdate' 'Checking for updates...')
@@ -132,11 +164,16 @@ Write-Host ''
 Write-Host (Text 'preparing' 'Preparing file transfer...') -ForegroundColor Cyan
 
 if (!(Test-BinaryHashes)) {
-    Write-Host (Text 'integrityFailed' 'Application integrity check failed. Reinstall the application.') -ForegroundColor Red
+    Write-Host (Text 'integrityFailed' 'Application integrity check failed. Download the application again.') -ForegroundColor Red
     exit 1
 }
 
 [void](Invoke-ReleaseUpdateIfNeeded)
+
+if (!(Ensure-FirewallConfigured)) {
+    Write-Host (Text 'firewallFailed' 'Windows Firewall could not be configured.') -ForegroundColor Red
+    exit 1
+}
 
 $startScript = Join-Path $AppDir 'Start-Transfer.ps1'
 if (!(Test-Path -LiteralPath $startScript)) {
