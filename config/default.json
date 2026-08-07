@@ -1,7 +1,6 @@
 {
   "deviceName": "共用PC",
   "locale": "ja",
-  "shortcutName": "オフラインファイル転送（PC-スマホ）",
   "port": 8765,
   "receiveDir": "received-files",
   "sendDir": "shared-files",
