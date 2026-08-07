@@ -13,4 +13,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: echo workflow-ok
+      - name: Apply patch
+        run: python scripts/patch_locale_ui.py
+      - name: Test
+        working-directory: src
+        run: go test ./...
+      - name: Commit patch
+        run: |
+          rm scripts/patch_locale_ui.py
+          rm .github/workflows/locale-ui-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add browser language selector'
+          git push
