@@ -17,6 +17,8 @@ if not exist "%SOURCE_APP%\Launch.cmd" goto :missing
 if not exist "%SOURCE_APP%\Bootstrap.ps1" goto :missing
 if not exist "%SOURCE_APP%\Start-Transfer.ps1" goto :missing
 if not exist "%SOURCE_APP%\Update.ps1" goto :missing
+if not exist "%SOURCE_APP%\Uninstall.cmd" goto :missing
+if not exist "%SOURCE_APP%\Uninstall.ps1" goto :missing
 if not exist "%SOURCE_APP%\transfer-config.json" goto :missing
 if not exist "%SOURCE_APP%\SHA256SUMS.txt" goto :missing
 
@@ -58,6 +60,9 @@ echo Setup completed.
 echo ================================================
 echo.
 echo Start the application with "Offline File Transfer.cmd" on the desktop.
+echo You can delete the extracted ZIP folder after setup.
+echo To uninstall, run:
+echo   C:\ProgramData\OfflineFileTransfer\Uninstall.cmd
 echo.
 pause
 exit /b 0
