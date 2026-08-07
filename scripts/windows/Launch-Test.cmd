@@ -1,10 +1,9 @@
 @echo off
 setlocal
 set "APPDIR=%~dp0"
-if not exist "%APPDIR%.installed" (
+if not exist "%APPDIR%Bootstrap.ps1" (
   echo.
-  echo This is an internal test launcher.
-  echo Install the application with Setup.cmd first.
+  echo Bootstrap.ps1 was not found.
   echo.
   pause
   exit /b 1
