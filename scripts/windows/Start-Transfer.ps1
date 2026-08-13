@@ -81,6 +81,20 @@ function Test-ExecutableHash([string]$path, [string]$expectedHash) {
     } catch { return $false }
 }
 
+function Start-TransferExecutable {
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $ExePath
+    $startInfo.WorkingDirectory = $AppDir
+    $startInfo.UseShellExecute = $false
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    if (!$process.Start()) {
+        throw (Text 'startupErrorBody' 'File transfer could not be started.')
+    }
+    $process.WaitForExit()
+    $process.Dispose()
+}
+
 if (!(Test-Path -LiteralPath $ConfigPath)) { throw (Text 'configMissing' 'transfer-config.json was not found.') }
 
 $expectedExecutables = @(Read-ExpectedExecutables)
@@ -114,8 +128,7 @@ if ($TestMode) {
         Write-Host (Text 'testModeLocalOnly' 'The test server is available only from this PC (127.0.0.1).') -ForegroundColor Yellow
         Write-Host (Text 'testModeNoWifi' 'Wi-Fi Direct and firewall changes are not used in test mode.') -ForegroundColor DarkGray
         Write-Host ''
-        $process = Start-Process -FilePath $ExePath -WorkingDirectory $AppDir -PassThru
-        $process.WaitForExit()
+        Start-TransferExecutable
     }
     catch {
         $detail = $_.Exception.Message
@@ -176,8 +189,7 @@ try {
     Write-Host (Text 'keepWindowOpen' 'Keep this window open until file transfer is finished.') -ForegroundColor DarkGray
     Write-Host ''
     Start-Sleep -Milliseconds 1000
-    $process = Start-Process -FilePath $ExePath -WorkingDirectory $AppDir -PassThru
-    $process.WaitForExit()
+    Start-TransferExecutable
 }
 catch {
     $detail = $_.Exception.Message
