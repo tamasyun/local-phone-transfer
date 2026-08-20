@@ -39,30 +39,9 @@ jobs:
         with:
           go-version-file: src/go.mod
 
-      - name: Apply Step 3 UI patch
-        if: github.ref_type == 'branch' && github.ref_name == 'main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/patch_step3_ui.py
-          gofmt -w src/template_admin.go
-
       - name: Test
         working-directory: src
         run: go test ./...
-
-      - name: Commit Step 3 UI fix
-        if: github.ref_type == 'branch' && github.ref_name == 'main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git show 8abde67e409be83b8e1de940e35ebdc12179b048:.github/workflows/release-windows.yml > .github/workflows/release-windows.yml
-          git rm scripts/patch_step3_ui.py
-          git add src/template_admin.go .github/workflows/release-windows.yml
-          git commit -m 'Fix wizard return flow and group transfer controls'
-          git push origin HEAD:main
 
       - name: Resolve version
         id: version
