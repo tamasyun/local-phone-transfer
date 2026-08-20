@@ -1,0 +1,18 @@
+from pathlib import Path
+
+p = Path('src/template_admin.go')
+s = p.read_text()
+
+old = "function markPhoneConnected(){if(phoneTransitionPending||sessionEnded)return;phoneTransitionPending=true;const w=document.getElementById('phoneWaiting');w.classList.add('connected');document.getElementById('phoneWaitingText').textContent=msg.phoneConnected;setTimeout(()=>goToStep(3),650)}"
+new = "function markPhoneConnected(){if(phoneTransitionPending||sessionEnded)return;phoneTransitionPending=true;const w=document.getElementById('phoneWaiting');w.classList.add('connected');document.getElementById('phoneWaitingText').textContent=msg.phoneConnected;setTimeout(()=>{goToStep(3);phoneTransitionPending=false},650)}"
+if old not in s:
+    raise SystemExit('markPhoneConnected marker not found')
+s = s.replace(old, new, 1)
+
+old = '''<section class="wizardStep" data-step="3"><div class="wizardCard wide"><div class="wizardHead"><div class="wizardNo">3</div><div><h2>{{x "ファイルを転送する" "Transfer files"}}</h2><p>{{t "step3.description"}}</p></div></div><div class="actions"><label class="fileLabel primary">{{t "admin.pickFiles"}}<input id="sharePick" type="file" multiple></label><button class="btn" onclick="openFolder('send')">{{t "admin.openSend"}}</button><button class="btn" onclick="openFolder('receive')">{{t "admin.openReceive"}}</button></div><div id="shareStatus" class="status"></div><div class="panels"><div class="panel"><h3>{{t "admin.sendHeading"}}</h3><div class="muted">{{t "admin.sendDescription"}}</div><div id="sendList"></div><button class="btn danger" onclick="clearSide('send')" style="margin-top:12px">{{t "admin.clearSend"}}</button></div><div class="panel"><h3>{{t "admin.receiveHeading"}}</h3><div class="muted">{{t "admin.receiveDescription"}}</div><div id="recvList"></div><button class="btn danger" onclick="clearSide('receive')" style="margin-top:12px">{{t "admin.clearReceive"}}</button></div></div><div class="wizardActions"><button class="btn" onclick="goToStep(1)">← {{x "接続案内を見る" "View connection instructions"}}</button><div class="rightActions"><button class="btn primary" onclick="stopApp()">{{t "finish.button"}} →</button></div></div></div></section>'''
+new = '''<section class="wizardStep" data-step="3"><div class="wizardCard wide"><div class="wizardHead"><div class="wizardNo">3</div><div><h2>{{x "ファイルを転送する" "Transfer files"}}</h2><p>{{t "step3.description"}}</p></div></div><div class="panels"><div class="panel"><h3>{{t "admin.sendHeading"}}</h3><div class="muted">{{t "admin.sendDescription"}}</div><div id="sendList"></div><div class="actions" style="margin-top:12px"><label class="fileLabel primary">{{x "＋ ファイルを追加" "+ Add files"}}<input id="sharePick" type="file" multiple></label><button class="btn" onclick="openFolder('send')">{{x "フォルダーを開く" "Open folder"}}</button><button class="btn danger" onclick="clearSide('send')">{{t "admin.clearSend"}}</button></div><div id="shareStatus" class="status"></div></div><div class="panel"><h3>{{t "admin.receiveHeading"}}</h3><div class="muted">{{t "admin.receiveDescription"}}</div><div id="recvList"></div><div class="actions" style="margin-top:12px"><button class="btn" onclick="openFolder('receive')">{{x "フォルダーを開く" "Open folder"}}</button><button class="btn danger" onclick="clearSide('receive')">{{t "admin.clearReceive"}}</button></div></div></div><div class="wizardActions"><button class="btn" onclick="goToStep(2)">← {{x "接続方法を確認" "Check connection"}}</button><div class="rightActions"><button class="btn primary" onclick="stopApp()">{{t "finish.button"}} →</button></div></div></div></section>'''
+if old not in s:
+    raise SystemExit('Step 3 marker not found')
+s = s.replace(old, new, 1)
+
+p.write_text(s)
